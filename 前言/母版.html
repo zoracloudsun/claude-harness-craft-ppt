@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Claude Code Harness · 核心要点解析指南</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --gold: #FFD700;
+      --cyan: #00F3FF;
+      --magenta: #FF00C8;
+      --dark: #0A0A0A;
+      --grid: rgba(40, 40, 40, 0.4);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: var(--dark);
+      font-family: 'Inter', sans-serif;
+      height: 100vh;
+      overflow: hidden;
+      position: relative;
+      color: white;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    /* 网格背景 + 粒子 */
+    body::before {
+      content: "";
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: 
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+      background-size: 32px 32px;
+      z-index: -1;
+      animation: gridPulse 6s infinite alternate;
+    }
+
+    @keyframes gridPulse {
+      0% { opacity: 0.6; }
+      100% { opacity: 0.85; }
+    }
+
+    /* 粒子点缀 */
+    .particle {
+      position: absolute;
+      width: 4px; height: 4px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.6);
+      animation: float 12s infinite linear;
+    }
+
+    @keyframes float {
+      0% { transform: translate(0, 0) rotate(0deg); opacity: 0; }
+      10% { opacity: 1; }
+      90% { opacity: 1; }
+      100% { transform: translate(calc(50vw + 200px), calc(50vh + 100px)) rotate(360deg); opacity: 0; }
+    }
+
+    /* 主容器 */
+    .slide {
+      text-align: center;
+      max-width: 900px;
+      padding: 0 20px;
+      z-index: 10;
+    }
+
+    /* 顶部标签 */
+    .tag {
+      display: inline-block;
+      background: rgba(0, 30, 50, 0.6);
+      border: 1px solid rgba(0, 200, 255, 0.3);
+      border-radius: 20px;
+      padding: 6px 20px;
+      font-size: 0.85rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--cyan);
+      margin-bottom: 30px;
+      animation: fadeInUp 0.8s ease-out forwards;
+    }
+
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* 主标题 */
+    .title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 4.2rem;
+      font-weight: 700;
+      margin: 20px 0;
+      line-height: 1.1;
+      position: relative;
+      animation: titleGlow 1.2s ease-out forwards;
+    }
+
+    .title span:nth-child(1) { color: var(--gold); text-shadow: 0 0 18px rgba(255, 215, 0, 0.7); }
+    .title span:nth-child(2) { color: var(--cyan); text-shadow: 0 0 18px rgba(0, 243, 255, 0.7); }
+    .title span:nth-child(3) { color: var(--magenta); text-shadow: 0 0 18px rgba(255, 0, 200, 0.7); }
+
+    @keyframes titleGlow {
+      0% { opacity: 0; transform: scale(0.8); }
+      60% { opacity: 0.8; }
+      100% { 
+        opacity: 1; 
+        transform: scale(1);
+        text-shadow: 
+          0 0 12px var(--gold),
+          0 0 20px var(--gold),
+          0 0 12px var(--cyan),
+          0 0 20px var(--cyan),
+          0 0 12px var(--magenta),
+          0 0 20px var(--magenta);
+      }
+    }
+
+    /* 副标题 */
+    .subtitle {
+      font-size: 2.1rem;
+      font-weight: 600;
+      margin: 25px 0;
+      letter-spacing: 1px;
+      animation: fadeIn 0.9s ease-out 0.5s forwards;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    /* 分隔线 */
+    .divider {
+      width: 120px;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--gold), transparent);
+      margin: 30px auto;
+      animation: slideIn 0.7s ease-out 1.2s forwards;
+    }
+
+    @keyframes slideIn {
+      from { width: 0; }
+      to { width: 120px; }
+    }
+
+    /* 旅程描述 */
+    .journey {
+      font-size: 1.1rem;
+      opacity: 0.8;
+      letter-spacing: 2px;
+      margin: 20px 0;
+      animation: fadeSlide 0.8s ease-out 1.6s forwards;
+    }
+
+    @keyframes fadeSlide {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 0.8; transform: translateY(0); }
+    }
+
+    /* 公式核心 */
+    .formula {
+      font-size: 3.2rem;
+      font-weight: 800;
+      margin: 40px 0;
+      line-height: 1.2;
+      animation: formulaReveal 1.4s ease-out 2.0s forwards;
+    }
+
+    .formula span:nth-child(1) { color: white; }
+    .formula span:nth-child(2) { color: var(--cyan); text-shadow: 0 0 14px rgba(0, 243, 255, 0.6); }
+    .formula span:nth-child(3) { color: var(--magenta); text-shadow: 0 0 14px rgba(255, 0, 200, 0.6); }
+
+    @keyframes formulaReveal {
+      0% { opacity: 0; transform: translateY(20px); }
+      50% { opacity: 0.6; }
+      100% { 
+        opacity: 1; 
+        transform: translateY(0);
+        text-shadow: 
+          0 0 10px rgba(255, 215, 0, 0.3),
+          0 0 16px var(--cyan),
+          0 0 16px var(--magenta);
+      }
+    }
+
+    /* 底部注释 */
+    .footnote {
+      font-size: 0.9rem;
+      opacity: 0.7;
+      margin-top: 30px;
+      animation: fadeUp 0.7s ease-out 3.0s forwards;
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(15px); }
+      to { opacity: 0.7; transform: translateY(0); }
+    }
+
+    /* 小字解释 */
+    .explanation {
+      display: flex;
+      justify-content: center;
+      gap: 40px;
+      margin-top: 20px;
+      font-size: 0.85rem;
+      opacity: 0;
+      animation: explainIn 0.8s ease-out 3.4s forwards;
+    }
+
+    @keyframes explainIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 0.6; transform: translateY(0); }
+    }
+
+    /* 响应式 */
+    @media (max-width: 768px) {
+      .title { font-size: 3.0rem; }
+      .subtitle { font-size: 1.6rem; }
+      .formula { font-size: 2.4rem; }
+      .tag { font-size: 0.75rem; padding: 4px 16px; }
+    }
+  </style>
+</head>
+<body>
+  <!-- 粒子点缀 -->
+  <div class="particle" style="left:10%; top:20%; animation-delay:0s;"></div>
+  <div class="particle" style="left:85%; top:30%; animation-delay:2s;"></div>
+  <div class="particle" style="left:45%; top:70%; animation-delay:4s;"></div>
+  <div class="particle" style="left:60%; top:15%; animation-delay:6s;"></div>
+  <div class="particle" style="left:25%; top:85%; animation-delay:8s;"></div>
+
+  <div class="slide">
+    <div class="tag">OPENING · 开篇导览</div>
+    
+    <h1 class="title">
+      <span>Claude</span>
+      <span>Code</span>
+      <span>Harness</span>
+    </h1>
+
+    <div class="subtitle">核心要点解析指南</div>
+
+    <div class="divider"></div>
+
+    <div class="journey">从被动使用到主动驾驭</div>
+    <div class="journey">A Journey Into AI Engineering · 10 Chapters</div>
+
+    <div class="formula">
+      <span>Agent</span>
+      <span>= Model</span>
+      <span>+ Harness</span>
+    </div>
+
+    <div class="footnote">Harness · 引擎周围的全部基础设施</div>
+
+    <div class="explanation">
+      <div>智能体</div>
+      <div>引擎模型</div>
+      <div>工程挽具</div>
+    </div>
+  </div>
+
+  <script>
+    // 自动重置动画（用于循环演示）
+    document.addEventListener('DOMContentLoaded', () => {
+      setTimeout(() => {
+        const slide = document.querySelector('.slide');
+        slide.style.animation = 'none';
+        setTimeout(() => {
+          slide.style.animation = '';
+        }, 10);
+      }, 5000);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,1606 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Claude Code Harness · 前言全 11 页</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    /* ========== DESIGN SYSTEM (from 1.html) ========== */
+    :root {
+      --gold: #FFD700;
+      --cyan: #00F3FF;
+      --magenta: #FF00C8;
+      --dark: #0A0A0A;
+      --dark-card: rgba(15, 15, 20, 0.85);
+      --grid: rgba(40, 40, 40, 0.4);
+      --text: #E8E8E8;
+      --text-dim: rgba(255, 255, 255, 0.55);
+      --gold-glow: rgba(255, 215, 0, 0.6);
+      --cyan-glow: rgba(0, 243, 255, 0.6);
+      --magenta-glow: rgba(255, 0, 200, 0.6);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--dark);
+      font-family: 'Inter', sans-serif;
+      color: white;
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    /* ========== GRID BACKGROUND ========== */
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+      background-size: 32px 32px;
+      z-index: 0;
+      animation: gridPulse 6s infinite alternate;
+    }
+    @keyframes gridPulse {
+      0% { opacity: 0.6; }
+      100% { opacity: 0.85; }
+    }
+
+    /* ========== SNOWFLAKE PARTICLES ========== */
+    .snowflake {
+      position: fixed;
+      border-radius: 50%;
+      background: white;
+      pointer-events: none;
+      z-index: 1;
+      animation: snowfall linear infinite, snowSway ease-in-out infinite;
+    }
+    @keyframes snowfall {
+      0%   { top: -8px; opacity: 0; }
+      5%   { opacity: 1; }
+      92%  { opacity: 0.8; }
+      100% { top: 105vh; opacity: 0; }
+    }
+    @keyframes snowSway {
+      0%, 100% { transform: translateX(0) rotate(0deg); }
+      25%      { transform: translateX(18px) rotate(90deg); }
+      50%      { transform: translateX(-12px) rotate(180deg); }
+      75%      { transform: translateX(22px) rotate(270deg); }
+    }
+
+    /* ========== DECK CONTAINER ========== */
+    .deck {
+      width: 1920px;
+      height: 1080px;
+      position: relative;
+      transform-origin: center center;
+      z-index: 10;
+    }
+
+    /* ========== SLIDE BASE ========== */
+    .slide {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 80px 120px 100px;
+      text-align: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.5s ease;
+    }
+    .slide.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .slide:not(.active) { display: none !important; }
+
+    /* ========== TYPOGRAPHY ========== */
+    .tag {
+      display: inline-block;
+      background: rgba(0,30,50,0.6);
+      border: 1px solid rgba(0,200,255,0.3);
+      border-radius: 20px;
+      padding: 6px 20px;
+      font-size: 0.85rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--cyan);
+      margin-bottom: 20px;
+    }
+
+    .slide-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 3.2rem;
+      font-weight: 700;
+      margin: 10px 0 6px;
+      line-height: 1.15;
+    }
+    .slide-title .gold   { color: var(--gold); text-shadow: 0 0 14px var(--gold-glow); }
+    .slide-title .cyan   { color: var(--cyan); text-shadow: 0 0 14px var(--cyan-glow); }
+    .slide-title .magenta{ color: var(--magenta); text-shadow: 0 0 14px var(--magenta-glow); }
+
+    .slide-subtitle {
+      font-size: 1.3rem;
+      font-weight: 400;
+      color: var(--text-dim);
+      letter-spacing: 1px;
+      margin-bottom: 10px;
+    }
+
+    .slide-subtitle-en {
+      font-size: 0.9rem;
+      color: var(--text-dim);
+      opacity: 0.6;
+      letter-spacing: 2px;
+      margin-bottom: 20px;
+    }
+
+    .divider {
+      width: 100px;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--gold), transparent);
+      margin: 16px auto 24px;
+    }
+
+    /* ========== NAV CONTROLS ========== */
+    .nav {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      z-index: 100;
+      background: rgba(10,10,10,0.8);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 40px;
+      padding: 10px 28px;
+      backdrop-filter: blur(10px);
+    }
+    .nav button {
+      background: none;
+      border: 1px solid rgba(255,255,255,0.2);
+      color: white;
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 1.1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+    .nav button:hover {
+      border-color: var(--cyan);
+      color: var(--cyan);
+      box-shadow: 0 0 10px var(--cyan-glow);
+    }
+    .nav .page-info {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+      color: var(--text-dim);
+      min-width: 80px;
+      text-align: center;
+    }
+    .nav .dots {
+      display: flex;
+      gap: 6px;
+    }
+    .nav .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.2);
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    .nav .dot.active {
+      background: var(--cyan);
+      box-shadow: 0 0 8px var(--cyan-glow);
+    }
+
+    /* ========== ANIMATIONS ========== */
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(24px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+    @keyframes scaleIn {
+      from { opacity: 0; transform: scale(0.85); }
+      to   { opacity: 1; transform: scale(1); }
+    }
+    @keyframes slideInLeft {
+      from { opacity: 0; transform: translateX(-40px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes slideInRight {
+      from { opacity: 0; transform: translateX(40px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes glowPulse {
+      0%, 100% { box-shadow: 0 0 8px rgba(0,243,255,0.15); }
+      50%      { box-shadow: 0 0 20px rgba(0,243,255,0.35); }
+    }
+
+    .anim-up   { animation: fadeInUp 0.6s ease-out both; }
+    .anim-in   { animation: fadeIn 0.6s ease-out both; }
+    .anim-scale{ animation: scaleIn 0.7s ease-out both; }
+    .anim-left { animation: slideInLeft 0.6s ease-out both; }
+    .anim-right{ animation: slideInRight 0.6s ease-out both; }
+
+    .d1 { animation-delay: 0.1s; }
+    .d2 { animation-delay: 0.25s; }
+    .d3 { animation-delay: 0.4s; }
+    .d4 { animation-delay: 0.55s; }
+    .d5 { animation-delay: 0.7s; }
+    .d6 { animation-delay: 0.85s; }
+    .d7 { animation-delay: 1.0s; }
+    .d8 { animation-delay: 1.15s; }
+
+    /* ========== SLIDE 1: COVER (from 1.html) ========== */
+    .cover-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 4.2rem;
+      font-weight: 700;
+      margin: 20px 0;
+      line-height: 1.1;
+    }
+    .cover-title .ct1 { color: var(--gold); text-shadow: 0 0 18px var(--gold-glow); }
+    .cover-title .ct2 { color: var(--cyan); text-shadow: 0 0 18px var(--cyan-glow); }
+    .cover-title .ct3 { color: var(--magenta); text-shadow: 0 0 18px var(--magenta-glow); }
+
+    @keyframes titleGlow {
+      0%   { opacity: 0; transform: scale(0.8); }
+      60%  { opacity: 0.8; }
+      100% { opacity: 1; transform: scale(1);
+        text-shadow:
+          0 0 12px var(--gold), 0 0 20px var(--gold),
+          0 0 12px var(--cyan), 0 0 20px var(--cyan),
+          0 0 12px var(--magenta), 0 0 20px var(--magenta);
+      }
+    }
+    .cover-title { animation: titleGlow 1.2s ease-out both; }
+
+    .cover-sub {
+      font-size: 2.1rem;
+      font-weight: 600;
+      margin: 25px 0;
+      letter-spacing: 1px;
+      color: var(--text);
+    }
+
+    .cover-divider {
+      width: 120px;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--gold), transparent);
+      margin: 30px auto;
+    }
+    @keyframes slideIn {
+      from { width: 0; }
+      to   { width: 120px; }
+    }
+    .cover-divider { animation: slideIn 0.7s ease-out 1.2s both; }
+
+    .cover-journey {
+      font-size: 1.1rem;
+      opacity: 0.8;
+      letter-spacing: 2px;
+      margin: 8px 0;
+      color: var(--text-dim);
+    }
+
+    .cover-formula {
+      font-size: 3.2rem;
+      font-weight: 800;
+      margin: 36px 0;
+      line-height: 1.2;
+    }
+    .cover-formula .cf1 { color: white; }
+    .cover-formula .cf2 { color: var(--cyan); text-shadow: 0 0 14px var(--cyan-glow); }
+    .cover-formula .cf3 { color: var(--magenta); text-shadow: 0 0 14px var(--magenta-glow); }
+    @keyframes formulaReveal {
+      0%   { opacity: 0; transform: translateY(20px); }
+      50%  { opacity: 0.6; }
+      100% { opacity: 1; transform: translateY(0);
+        text-shadow: 0 0 10px rgba(255,215,0,0.3), 0 0 16px var(--cyan), 0 0 16px var(--magenta);
+      }
+    }
+    .cover-formula { animation: formulaReveal 1.4s ease-out 2.0s both; }
+
+    .cover-footnote {
+      font-size: 0.9rem;
+      opacity: 0.7;
+      margin-top: 16px;
+      color: var(--text-dim);
+    }
+    .cover-footnote { animation: fadeInUp 0.7s ease-out 3.0s both; }
+
+    .cover-explain {
+      display: flex;
+      justify-content: center;
+      gap: 40px;
+      margin-top: 12px;
+      font-size: 0.85rem;
+      color: var(--text-dim);
+      opacity: 0.6;
+    }
+    .cover-explain { animation: fadeIn 0.8s ease-out 3.4s both; }
+
+    /* ========== SLIDE 2: PAIN POINTS ========== */
+    .pain-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 24px;
+      width: 100%;
+      max-width: 1600px;
+      margin-top: 20px;
+    }
+    .pain-card {
+      background: var(--dark-card);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 36px 24px 32px;
+      text-align: left;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.3s, transform 0.3s;
+    }
+    .pain-card:hover {
+      border-color: rgba(0,243,255,0.3);
+      transform: translateY(-4px);
+    }
+    .pain-card .pain-icon {
+      font-size: 1.6rem;
+      margin-bottom: 14px;
+      display: block;
+    }
+    .pain-card .pain-num {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.85rem;
+      color: var(--cyan);
+      letter-spacing: 2px;
+      margin-bottom: 10px;
+    }
+    .pain-card .pain-title {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin-bottom: 12px;
+      color: var(--gold);
+    }
+    .pain-card .pain-desc {
+      font-size: 1rem;
+      line-height: 1.65;
+      color: var(--text-dim);
+    }
+    .pain-card::after {
+      content: "";
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 3px;
+      background: linear-gradient(90deg, var(--cyan), var(--magenta));
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .pain-card:hover::after { opacity: 1; }
+
+    /* ========== SLIDE 3: PARADIGM SHIFT ========== */
+    .paradigm-wrap {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 60px;
+      align-items: center;
+      width: 100%;
+      max-width: 1500px;
+      margin-top: 20px;
+    }
+    .paradigm-box {
+      background: var(--dark-card);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 20px;
+      padding: 48px 40px;
+      text-align: left;
+    }
+    .paradigm-box.left  { border-color: rgba(255,255,255,0.1); }
+    .paradigm-box.right {
+      border-color: rgba(0,243,255,0.25);
+      box-shadow: 0 0 30px rgba(0,243,255,0.08);
+    }
+    .paradigm-box .pb-label {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.8rem;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+    .paradigm-box.left .pb-label  { color: var(--text-dim); }
+    .paradigm-box.right .pb-label { color: var(--cyan); }
+    .paradigm-box .pb-title {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 28px;
+    }
+    .paradigm-box.left .pb-title  { color: rgba(255,255,255,0.5); }
+    .paradigm-box.right .pb-title { color: var(--gold); }
+    .paradigm-box .pb-item {
+      font-size: 1.15rem;
+      line-height: 1.5;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .paradigm-box.left .pb-item  { color: rgba(255,255,255,0.4); }
+    .paradigm-box.right .pb-item { color: var(--text); }
+    .paradigm-box .pb-item .pb-icon {
+      font-size: 1.3rem;
+      flex-shrink: 0;
+    }
+    .paradigm-arrow {
+      font-size: 3.5rem;
+      color: var(--cyan);
+      text-shadow: 0 0 20px var(--cyan-glow);
+      animation: arrowPulse 2s infinite;
+    }
+    @keyframes arrowPulse {
+      0%, 100% { opacity: 0.5; transform: scale(1); }
+      50%      { opacity: 1;   transform: scale(1.15); }
+    }
+    .paradigm-note {
+      font-size: 1rem;
+      color: var(--magenta);
+      margin-top: 24px;
+      letter-spacing: 2px;
+    }
+
+    /* ========== SLIDE 4: FORMULA ========== */
+    .formula-main {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 4.5rem;
+      font-weight: 700;
+      margin: 20px 0 8px;
+      line-height: 1.2;
+    }
+    .formula-main .f-agent { color: white; }
+    .formula-main .f-model { color: var(--cyan); text-shadow: 0 0 16px var(--cyan-glow); }
+    .formula-main .f-harness { color: var(--magenta); text-shadow: 0 0 16px var(--magenta-glow); }
+    .formula-main .f-eq, .formula-main .f-plus {
+      color: var(--text-dim);
+      font-weight: 400;
+    }
+    .formula-label {
+      font-size: 1rem;
+      color: var(--text-dim);
+      letter-spacing: 3px;
+      margin-bottom: 30px;
+    }
+    .formula-cols {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 40px;
+      width: 100%;
+      max-width: 1300px;
+      margin-top: 10px;
+    }
+    .formula-col {
+      background: var(--dark-card);
+      border-radius: 16px;
+      padding: 36px 40px;
+      text-align: left;
+    }
+    .formula-col.model-col {
+      border: 1px solid rgba(0,243,255,0.15);
+    }
+    .formula-col.harness-col {
+      border: 1px solid rgba(255,0,200,0.2);
+    }
+    .formula-col .fc-head {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.1rem;
+      letter-spacing: 2px;
+      margin-bottom: 22px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .formula-col.model-col .fc-head  { color: var(--cyan); }
+    .formula-col.harness-col .fc-head { color: var(--magenta); }
+    .formula-col .fc-item {
+      font-size: 1.1rem;
+      line-height: 1.5;
+      color: var(--text-dim);
+      margin-bottom: 10px;
+      padding-left: 20px;
+      position: relative;
+    }
+    .formula-col .fc-item::before {
+      content: "";
+      position: absolute;
+      left: 0; top: 10px;
+      width: 6px; height: 6px;
+      border-radius: 50%;
+    }
+    .formula-col.model-col .fc-item::before  { background: var(--cyan); opacity: 0.5; }
+    .formula-col.harness-col .fc-item::before { background: var(--magenta); opacity: 0.7; }
+    .formula-verdict {
+      font-size: 1.3rem;
+      color: var(--gold);
+      text-shadow: 0 0 12px var(--gold-glow);
+      margin-top: 20px;
+      letter-spacing: 1px;
+    }
+
+    /* ========== SLIDE 5: FOUR LAYERS ========== */
+    .layers-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      width: 100%;
+      max-width: 1300px;
+      margin-top: 10px;
+    }
+    .layer-row {
+      display: grid;
+      grid-template-columns: 100px 1fr;
+      gap: 30px;
+      align-items: center;
+      background: var(--dark-card);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 14px;
+      padding: 28px 40px;
+      transition: border-color 0.3s, transform 0.3s;
+    }
+    .layer-row:hover {
+      transform: translateX(6px);
+    }
+    .layer-row.l4 { border-left: 4px solid var(--magenta); }
+    .layer-row.l3 { border-left: 4px solid var(--cyan); }
+    .layer-row.l2 { border-left: 4px solid var(--gold); }
+    .layer-row.l1 { border-left: 4px solid #888; }
+    .layer-row.l4:hover { border-color: var(--magenta); }
+    .layer-row.l3:hover { border-color: var(--cyan); }
+    .layer-row.l2:hover { border-color: var(--gold); }
+    .layer-row.l1:hover { border-color: #aaa; }
+    .layer-label {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.6rem;
+      font-weight: 700;
+      text-align: center;
+    }
+    .layer-row.l4 .layer-label { color: var(--magenta); }
+    .layer-row.l3 .layer-label { color: var(--cyan); }
+    .layer-row.l2 .layer-label { color: var(--gold); }
+    .layer-row.l1 .layer-label { color: #999; }
+    .layer-content {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+    .layer-name {
+      font-size: 1.35rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .layer-dot {
+      width: 4px; height: 4px;
+      border-radius: 50%;
+      background: var(--text-dim);
+      flex-shrink: 0;
+    }
+    .layer-desc {
+      font-size: 1rem;
+      color: var(--text-dim);
+      letter-spacing: 1px;
+    }
+    .layers-caption {
+      font-size: 1rem;
+      color: var(--text-dim);
+      margin-top: 16px;
+      font-style: italic;
+    }
+
+    /* ========== SLIDE 6: COURSE MAP ========== */
+    .map-table {
+      width: 100%;
+      max-width: 1500px;
+      border-collapse: separate;
+      border-spacing: 0 8px;
+      margin-top: 10px;
+    }
+    .map-table th {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      text-align: left;
+      padding: 8px 20px;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+    .map-table td {
+      padding: 18px 20px;
+      font-size: 1.05rem;
+      background: var(--dark-card);
+      border-top: 1px solid rgba(255,255,255,0.04);
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    .map-table tr td:first-child {
+      border-left: 4px solid var(--cyan);
+      border-radius: 10px 0 0 10px;
+    }
+    .map-table tr td:last-child {
+      border-radius: 0 10px 10px 0;
+    }
+    .map-table .module-tag {
+      display: inline-block;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      letter-spacing: 1px;
+      padding: 4px 12px;
+      border-radius: 6px;
+      font-weight: 500;
+    }
+    .module-base   { background: rgba(0,243,255,0.12); color: var(--cyan); }
+    .module-core   { background: rgba(255,215,0,0.12); color: var(--gold); }
+    .module-eco    { background: rgba(180,130,255,0.12); color: #B482FF; }
+    .module-practice { background: rgba(0,200,120,0.12); color: #00C878; }
+    .map-table .ch-num {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.9rem;
+      color: var(--gold);
+    }
+    .map-table .ch-title {
+      font-weight: 600;
+      color: white;
+    }
+    .map-table .ch-key {
+      font-size: 0.9rem;
+      color: var(--text-dim);
+    }
+    .map-note {
+      font-size: 0.85rem;
+      color: var(--text-dim);
+      margin-top: 12px;
+      opacity: 0.6;
+    }
+
+    /* ========== SLIDE 7: LEARNING PATH ========== */
+    .path-track {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0;
+      width: 100%;
+      max-width: 1500px;
+      margin-top: 10px;
+      position: relative;
+    }
+    /* connecting line */
+    .path-track::before {
+      content: "";
+      position: absolute;
+      top: 52px;
+      left: 80px;
+      right: 80px;
+      height: 2px;
+      background: linear-gradient(90deg, var(--cyan), var(--gold), #B482FF, var(--magenta));
+      z-index: 0;
+    }
+    .path-step {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      padding: 0 24px;
+      position: relative;
+      z-index: 1;
+    }
+    .path-circle {
+      width: 64px; height: 64px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.2rem;
+      font-weight: 700;
+      margin-bottom: 20px;
+      border: 2px solid;
+      background: var(--dark);
+    }
+    .path-step:nth-child(1) .path-circle { border-color: var(--cyan); color: var(--cyan); box-shadow: 0 0 16px rgba(0,243,255,0.25); }
+    .path-step:nth-child(2) .path-circle { border-color: var(--gold); color: var(--gold); box-shadow: 0 0 16px rgba(255,215,0,0.25); }
+    .path-step:nth-child(3) .path-circle { border-color: #B482FF; color: #B482FF; box-shadow: 0 0 16px rgba(180,130,255,0.25); }
+    .path-step:nth-child(4) .path-circle { border-color: var(--magenta); color: var(--magenta); box-shadow: 0 0 16px rgba(255,0,200,0.25); }
+    .path-icon {
+      font-size: 1.8rem;
+      margin-bottom: 14px;
+    }
+    .path-name {
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin-bottom: 10px;
+      color: white;
+    }
+    .path-desc {
+      font-size: 1rem;
+      color: var(--text-dim);
+      line-height: 1.5;
+      margin-bottom: 10px;
+    }
+    .path-chapters {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      color: var(--cyan);
+      letter-spacing: 1px;
+    }
+
+    /* ========== SLIDE 8: FOUR FEATURES ========== */
+    .feat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 28px;
+      width: 100%;
+      max-width: 1400px;
+      margin-top: 10px;
+    }
+    .feat-card {
+      background: var(--dark-card);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 18px;
+      padding: 40px 36px;
+      text-align: left;
+      transition: border-color 0.3s, transform 0.3s;
+    }
+    .feat-card:hover {
+      transform: translateY(-4px);
+    }
+    .feat-card:nth-child(1) { border-top: 3px solid var(--cyan); }
+    .feat-card:nth-child(1):hover { border-color: var(--cyan); }
+    .feat-card:nth-child(2) { border-top: 3px solid var(--gold); }
+    .feat-card:nth-child(2):hover { border-color: var(--gold); }
+    .feat-card:nth-child(3) { border-top: 3px solid #B482FF; }
+    .feat-card:nth-child(3):hover { border-color: #B482FF; }
+    .feat-card:nth-child(4) { border-top: 3px solid var(--magenta); }
+    .feat-card:nth-child(4):hover { border-color: var(--magenta); }
+    .feat-tag {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.7rem;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+    .feat-card:nth-child(1) .feat-tag { color: var(--cyan); }
+    .feat-card:nth-child(2) .feat-tag { color: var(--gold); }
+    .feat-card:nth-child(3) .feat-tag { color: #B482FF; }
+    .feat-card:nth-child(4) .feat-tag { color: var(--magenta); }
+    .feat-name {
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: white;
+      margin-bottom: 10px;
+    }
+    .feat-desc {
+      font-size: 1rem;
+      color: var(--text-dim);
+      line-height: 1.5;
+      margin-bottom: 18px;
+    }
+    .feat-checks {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .feat-check {
+      font-size: 0.95rem;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .feat-check .ck {
+      width: 16px; height: 16px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.7rem;
+      flex-shrink: 0;
+    }
+    .feat-card:nth-child(1) .ck { background: rgba(0,243,255,0.2); color: var(--cyan); }
+    .feat-card:nth-child(2) .ck { background: rgba(255,215,0,0.2); color: var(--gold); }
+    .feat-card:nth-child(3) .ck { background: rgba(180,130,255,0.2); color: #B482FF; }
+    .feat-card:nth-child(4) .ck { background: rgba(255,0,200,0.2); color: var(--magenta); }
+
+    /* ========== SLIDE 9: READERS ========== */
+    .reader-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 32px;
+      width: 100%;
+      max-width: 1400px;
+      margin-top: 10px;
+    }
+    .reader-card {
+      background: var(--dark-card);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 18px;
+      padding: 44px 32px 36px;
+      text-align: left;
+      transition: border-color 0.3s, transform 0.3s;
+      position: relative;
+      overflow: hidden;
+    }
+    .reader-card:hover { transform: translateY(-4px); }
+    .reader-card::before {
+      content: "";
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      opacity: 0.03;
+      z-index: 0;
+    }
+    .reader-card:nth-child(1) { border-color: rgba(0,243,255,0.15); }
+    .reader-card:nth-child(1):hover { border-color: var(--cyan); }
+    .reader-card:nth-child(2) { border-color: rgba(255,215,0,0.15); }
+    .reader-card:nth-child(2):hover { border-color: var(--gold); }
+    .reader-card:nth-child(3) { border-color: rgba(255,0,200,0.15); }
+    .reader-card:nth-child(3):hover { border-color: var(--magenta); }
+    .reader-icon {
+      font-size: 2.2rem;
+      margin-bottom: 16px;
+      position: relative;
+      z-index: 1;
+    }
+    .reader-role {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.75rem;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+      position: relative;
+      z-index: 1;
+    }
+    .reader-card:nth-child(1) .reader-role { color: var(--cyan); }
+    .reader-card:nth-child(2) .reader-role { color: var(--gold); }
+    .reader-card:nth-child(3) .reader-role { color: var(--magenta); }
+    .reader-name {
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: white;
+      margin-bottom: 10px;
+      position: relative;
+      z-index: 1;
+    }
+    .reader-desc {
+      font-size: 1rem;
+      color: var(--text-dim);
+      line-height: 1.5;
+      margin-bottom: 18px;
+      position: relative;
+      z-index: 1;
+    }
+    .reader-checks {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      position: relative;
+      z-index: 1;
+    }
+    .reader-check {
+      font-size: 0.95rem;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .reader-check .rk {
+      font-size: 0.65rem;
+      width: 16px; height: 16px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .reader-card:nth-child(1) .rk { background: rgba(0,243,255,0.2); color: var(--cyan); }
+    .reader-card:nth-child(2) .rk { background: rgba(255,215,0,0.2); color: var(--gold); }
+    .reader-card:nth-child(3) .rk { background: rgba(255,0,200,0.2); color: var(--magenta); }
+
+    /* ========== SLIDE 10: GIFTS ========== */
+    .gift-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 28px;
+      width: 100%;
+      max-width: 1500px;
+      margin-top: 10px;
+    }
+    .gift-card {
+      background: var(--dark-card);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 18px;
+      padding: 40px 28px 32px;
+      text-align: center;
+      transition: border-color 0.3s, transform 0.3s;
+      position: relative;
+    }
+    .gift-card:hover { transform: translateY(-4px); }
+    .gift-card:nth-child(1) { border-color: rgba(0,243,255,0.12); }
+    .gift-card:nth-child(1):hover { border-color: var(--cyan); }
+    .gift-card:nth-child(2) { border-color: rgba(255,215,0,0.12); }
+    .gift-card:nth-child(2):hover { border-color: var(--gold); }
+    .gift-card:nth-child(3) { border-color: rgba(180,130,255,0.12); }
+    .gift-card:nth-child(3):hover { border-color: #B482FF; }
+    .gift-card:nth-child(4) { border-color: rgba(255,0,200,0.12); }
+    .gift-card:nth-child(4):hover { border-color: var(--magenta); }
+    .gift-num {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 2.5rem;
+      font-weight: 700;
+      margin-bottom: 18px;
+      opacity: 0.2;
+    }
+    .gift-card:nth-child(1) .gift-num { color: var(--cyan); opacity: 0.4; }
+    .gift-card:nth-child(2) .gift-num { color: var(--gold); opacity: 0.4; }
+    .gift-card:nth-child(3) .gift-num { color: #B482FF; opacity: 0.4; }
+    .gift-card:nth-child(4) .gift-num { color: var(--magenta); opacity: 0.4; }
+    .gift-title {
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: white;
+      margin-bottom: 12px;
+    }
+    .gift-desc {
+      font-size: 0.95rem;
+      color: var(--text-dim);
+      line-height: 1.55;
+    }
+    .gift-verdict {
+      font-size: 1.15rem;
+      color: var(--gold);
+      text-shadow: 0 0 10px var(--gold-glow);
+      margin-top: 24px;
+      letter-spacing: 1px;
+    }
+
+    /* ========== SLIDE 11: NEXT ========== */
+    .next-icon {
+      font-size: 3rem;
+      margin-bottom: 16px;
+      opacity: 0.4;
+    }
+    .next-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 2.8rem;
+      font-weight: 700;
+      color: var(--gold);
+      text-shadow: 0 0 20px var(--gold-glow);
+      margin-bottom: 10px;
+    }
+    .next-chapter {
+      font-size: 1.6rem;
+      color: var(--text);
+      margin-bottom: 30px;
+    }
+    .next-checks {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      margin-bottom: 36px;
+    }
+    .next-check {
+      font-size: 1.15rem;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .next-check .nc-icon {
+      color: var(--cyan);
+      font-size: 1rem;
+      flex-shrink: 0;
+    }
+    .next-cta {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.1rem;
+      letter-spacing: 3px;
+      color: var(--cyan);
+      opacity: 0.7;
+      animation: ctaPulse 3s infinite;
+    }
+    @keyframes ctaPulse {
+      0%, 100% { opacity: 0.5; }
+      50%      { opacity: 1; text-shadow: 0 0 16px var(--cyan-glow); }
+    }
+
+    /* Scale handled by JS rescale() for precision */
+  </style>
+</head>
+<body>
+  <!-- SNOWFLAKES (generated by JS below) -->
+  <div id="snowfield"></div>
+
+  <!-- DECK -->
+  <div class="deck" id="deck">
+
+    <!-- ==================== SLIDE 1: COVER ==================== -->
+    <div class="slide active" data-idx="1">
+      <div class="tag anim-up">OPENING · 开篇导览</div>
+      <h1 class="cover-title">
+        <span class="ct1">Claude</span>
+        <span class="ct2">Code</span>
+        <span class="ct3">Harness</span>
+      </h1>
+      <div class="cover-sub anim-in d1">核心要点解析指南</div>
+      <div class="cover-divider"></div>
+      <div class="cover-journey anim-in d2">从被动使用到主动驾驭</div>
+      <div class="cover-journey anim-in d3">A Journey Into AI Engineering · 10 Chapters</div>
+      <div class="cover-formula">
+        <span class="cf1">Agent</span>
+        <span> = </span>
+        <span class="cf2">Model</span>
+        <span> + </span>
+        <span class="cf3">Harness</span>
+      </div>
+      <div class="cover-footnote">Harness · 引擎周围的全部基础设施</div>
+      <div class="cover-explain">
+        <div>智能体</div>
+        <div>引擎模型</div>
+        <div>工程挽具</div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 2: 五个痛点 ==================== -->
+    <div class="slide" data-idx="2">
+      <div class="tag anim-up">PAIN POINTS · 痛点解析</div>
+      <h2 class="slide-title anim-up d1">
+        你是不是也遇到过这<span class="gold">五个痛点</span>？
+      </h2>
+      <div class="slide-subtitle anim-up d2">Claude Code 用户的共同困境</div>
+      <div class="divider anim-in d3"></div>
+      <div class="pain-grid">
+        <div class="pain-card anim-scale d2">
+          <span class="pain-icon">❗</span>
+          <div class="pain-num">#01</div>
+          <div class="pain-title">失忆症</div>
+          <div class="pain-desc">新会话忘记技术栈，<br>每次都要重新介绍项目。</div>
+        </div>
+        <div class="pain-card anim-scale d3">
+          <span class="pain-icon">🔀</span>
+          <div class="pain-num">#02</div>
+          <div class="pain-title">风格飘忽</div>
+          <div class="pain-desc">同任务两次生成，<br>代码风格不一致。</div>
+        </div>
+        <div class="pain-card anim-scale d4">
+          <span class="pain-icon">💬</span>
+          <div class="pain-num">#03</div>
+          <div class="pain-title">上下文溢出</div>
+          <div class="pain-desc">6 文件任务做到 4 个<br>就崩，前序逻辑丢失。</div>
+        </div>
+        <div class="pain-card anim-scale d5">
+          <span class="pain-icon">↗</span>
+          <div class="pain-num">#04</div>
+          <div class="pain-title">成本失控</div>
+          <div class="pain-desc">账单从几百飙到几万，<br>无人察觉，无人控制。</div>
+        </div>
+        <div class="pain-card anim-scale d6">
+          <span class="pain-icon">👥</span>
+          <div class="pain-num">#05</div>
+          <div class="pain-title">协作鸿沟</div>
+          <div class="pain-desc">新人摸索两周还在踩坑，<br>团队规范各写一套。</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 3: 范式升级 ==================== -->
+    <div class="slide" data-idx="3">
+      <div class="tag anim-up">PARADIGM SHIFT · 范式转换</div>
+      <h2 class="slide-title anim-up d1">
+        范式升级 · <span class="cyan">一切都不同了</span>
+      </h2>
+      <div class="slide-subtitle-en anim-up d2">Not capability problem · Mindset problem</div>
+      <div class="divider anim-in d3"></div>
+      <div class="paradigm-wrap">
+        <div class="paradigm-box left anim-left d3">
+          <div class="pb-label">BEFORE</div>
+          <div class="pb-title">聊天机器人式</div>
+          <div class="pb-item"><span class="pb-icon">□</span> 单次提问</div>
+          <div class="pb-item"><span class="pb-icon">💬</span> 逐次回答</div>
+          <div class="pb-item"><span class="pb-icon">≈</span> 上下文易失</div>
+        </div>
+        <div class="paradigm-arrow anim-scale d4">→</div>
+        <div class="paradigm-box right anim-right d3">
+          <div class="pb-label">AFTER</div>
+          <div class="pb-title">工程化编排</div>
+          <div class="pb-item"><span class="pb-icon">⚙️</span> 可配置规范</div>
+          <div class="pb-item"><span class="pb-icon">🧩</span> 可编排工作流</div>
+          <div class="pb-item"><span class="pb-icon">👥</span> 可规模化协作</div>
+        </div>
+      </div>
+      <div class="paradigm-note anim-up d6">不是能力问题 · 是范式问题</div>
+    </div>
+
+    <!-- ==================== SLIDE 4: 核心公式 ==================== -->
+    <div class="slide" data-idx="4">
+      <div class="tag anim-up">THE FORMULA · 核心公式</div>
+      <h2 class="slide-title anim-up d1">
+        一个核心公式 · <span class="gold">看懂全局</span>
+      </h2>
+      <div class="slide-subtitle-en anim-up d2">The Heart Of This Course</div>
+      <div class="divider anim-in d3"></div>
+      <div class="formula-main anim-scale d3">
+        <span class="f-agent">Agent</span>
+        <span class="f-eq"> = </span>
+        <span class="f-model">Model</span>
+        <span class="f-plus"> + </span>
+        <span class="f-harness">Harness</span>
+      </div>
+      <div class="formula-label anim-in d4">智能体　　　引擎模型　　　工程挽具</div>
+      <div class="formula-cols">
+        <div class="formula-col model-col anim-left d5">
+          <div class="fc-head">◆ Model · 引擎模型</div>
+          <div class="fc-item">能力天花板</div>
+          <div class="fc-item">训练即固化</div>
+          <div class="fc-item">通用知识</div>
+        </div>
+        <div class="formula-col harness-col anim-right d5">
+          <div class="fc-head">✓ Harness · 工程挽具</div>
+          <div class="fc-item">记忆</div>
+          <div class="fc-item">集成</div>
+          <div class="fc-item">扩展</div>
+          <div class="fc-item">编程</div>
+        </div>
+      </div>
+      <div class="formula-verdict anim-up d7">决定上限的不是模型，而是挽具</div>
+    </div>
+
+    <!-- ==================== SLIDE 5: 四层架构 ==================== -->
+    <div class="slide" data-idx="5">
+      <div class="tag anim-up">ARCHITECTURE · 架构全景</div>
+      <h2 class="slide-title anim-up d1">
+        Harness 的<span class="cyan">四层架构</span>
+      </h2>
+      <div class="slide-subtitle-en anim-up d2">FOUR LAYERS OF HARNESS</div>
+      <div class="divider anim-in d3"></div>
+      <div class="layers-wrap">
+        <div class="layer-row l4 anim-left d3">
+          <div class="layer-label">L4</div>
+          <div class="layer-content">
+            <span class="layer-name">编程层 · Programming</span>
+            <span class="layer-dot"></span>
+            <span class="layer-desc">Headless · Agent SDK</span>
+          </div>
+        </div>
+        <div class="layer-row l3 anim-left d4">
+          <div class="layer-label">L3</div>
+          <div class="layer-content">
+            <span class="layer-name">集成层 · Integration</span>
+            <span class="layer-dot"></span>
+            <span class="layer-desc">MCP 协议 · 外部世界连接</span>
+          </div>
+        </div>
+        <div class="layer-row l2 anim-left d5">
+          <div class="layer-label">L2</div>
+          <div class="layer-content">
+            <span class="layer-name">扩展层 · Extension</span>
+            <span class="layer-dot"></span>
+            <span class="layer-desc">Skills · 子智能体 · Hooks</span>
+          </div>
+        </div>
+        <div class="layer-row l1 anim-left d6">
+          <div class="layer-label">L1</div>
+          <div class="layer-content">
+            <span class="layer-name">记忆层 · Memory</span>
+            <span class="layer-dot"></span>
+            <span class="layer-desc">CLAUDE.md 五层记忆体系</span>
+          </div>
+        </div>
+      </div>
+      <div class="layers-caption anim-up d7">像一栋摩天大楼，每一层都是 Claude Code 能力的递进</div>
+    </div>
+
+    <!-- ==================== SLIDE 6: 十讲全景 ==================== -->
+    <div class="slide" data-idx="6">
+      <div class="tag anim-up">COURSE MAP · 知识地图</div>
+      <h2 class="slide-title anim-up d1">
+        十讲全景 · <span class="gold">完整知识地图</span>
+      </h2>
+      <div class="slide-subtitle anim-up d2">4 个模块 · 10 个章节 · 一套完整体系</div>
+      <div class="divider anim-in d3"></div>
+      <table class="map-table anim-up d4">
+        <thead>
+          <tr>
+            <th>模块</th>
+            <th>章节</th>
+            <th>章节标题</th>
+            <th>关键词</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="module-tag module-base">基础架构</span></td>
+            <td><span class="ch-num">第1章</span></td>
+            <td><span class="ch-title">Claude Code 技术架构全景</span></td>
+            <td><span class="ch-key">冰山 + 摩天大楼</span></td>
+          </tr>
+          <tr>
+            <td><span class="module-tag module-base">基础架构</span></td>
+            <td><span class="ch-num">第2章</span></td>
+            <td><span class="ch-title">记忆系统工程实践</span></td>
+            <td><span class="ch-key">CLAUDE.md 五层体系</span></td>
+          </tr>
+          <tr>
+            <td><span class="module-tag module-core">核心能力</span></td>
+            <td><span class="ch-num">第3章</span></td>
+            <td><span class="ch-title">Skills 工程实践</span></td>
+            <td><span class="ch-key">按需加载 + 渐进披露</span></td>
+          </tr>
+          <tr>
+            <td><span class="module-tag module-core">核心能力</span></td>
+            <td><span class="ch-num">第4章</span></td>
+            <td><span class="ch-title">子智能体与任务委派</span></td>
+            <td><span class="ch-key">CEO 委派模型</span></td>
+          </tr>
+          <tr>
+            <td><span class="module-tag module-core">核心能力</span></td>
+            <td><span class="ch-num">第5章</span></td>
+            <td><span class="ch-title">Hooks 事件驱动自动化</span></td>
+            <td><span class="ch-key">17 事件钩子</span></td>
+          </tr>
+          <tr>
+            <td><span class="module-tag module-eco">集成生态</span></td>
+            <td><span class="ch-num">第6章</span></td>
+            <td><span class="ch-title">MCP 模型上下文协议</span></td>
+            <td><span class="ch-key">USB-C 式标准接口</span></td>
+          </tr>
+          <tr>
+            <td><span class="module-tag module-practice">工程实践</span></td>
+            <td><span class="ch-num">第7章</span></td>
+            <td><span class="ch-title">Headless 与 CI/CD 集成</span></td>
+            <td><span class="ch-key">流水线公民</span></td>
+          </tr>
+          <tr>
+            <td><span class="module-tag module-practice">工程实践</span></td>
+            <td><span class="ch-num">第8章</span></td>
+            <td><span class="ch-title">Agent SDK 智能体开发套件</span></td>
+            <td><span class="ch-key">Python / TS 嵌入</span></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="map-note anim-up d6">模块色彩标识：蓝 → 黄 → 紫 → 绿</div>
+    </div>
+
+    <!-- ==================== SLIDE 7: 学习路径 ==================== -->
+    <div class="slide" data-idx="7">
+      <div class="tag anim-up">LEARNING PATH · 进阶路径</div>
+      <h2 class="slide-title anim-up d1">
+        学习路径 · <span class="magenta">四阶段进阶轴</span>
+      </h2>
+      <div class="slide-subtitle anim-up d2">从认识到驾驭 · 每一章为下一章打地基</div>
+      <div class="divider anim-in d3"></div>
+      <div class="path-track">
+        <div class="path-step anim-up d3">
+          <div class="path-circle">01</div>
+          <div class="path-icon">💡</div>
+          <div class="path-name">认识工具</div>
+          <div class="path-desc">理解 Claude Code 定位</div>
+          <div class="path-chapters">涵盖 第1–2章</div>
+        </div>
+        <div class="path-step anim-up d4">
+          <div class="path-circle">02</div>
+          <div class="path-icon">🧩</div>
+          <div class="path-name">扩展工具</div>
+          <div class="path-desc">能力按需重新组合</div>
+          <div class="path-chapters">涵盖 第3–5章</div>
+        </div>
+        <div class="path-step anim-up d5">
+          <div class="path-circle">03</div>
+          <div class="path-icon">🌐</div>
+          <div class="path-name">连接世界</div>
+          <div class="path-desc">访问外部数据与服务</div>
+          <div class="path-chapters">涵盖 第6章</div>
+        </div>
+        <div class="path-step anim-up d6">
+          <div class="path-circle">04</div>
+          <div class="path-icon">⚙️</div>
+          <div class="path-name">驾驭工具</div>
+          <div class="path-desc">工程化部署到团队</div>
+          <div class="path-chapters">涵盖 第7–10章</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 8: 四大特色 ==================== -->
+    <div class="slide" data-idx="8">
+      <div class="tag anim-up">FEATURES · 课程特色</div>
+      <h2 class="slide-title anim-up d1">
+        四大特色 · <span class="gold">与众不同的课程</span>
+      </h2>
+      <div class="slide-subtitle anim-up d2">不是文档堆砌 · 不是 API 罗列 · 而是一套可落地的工程方法</div>
+      <div class="divider anim-in d3"></div>
+      <div class="feat-grid">
+        <div class="feat-card anim-scale d3">
+          <div class="feat-tag">STORY</div>
+          <div class="feat-name">故事化</div>
+          <div class="feat-desc">大佬 × 萌新 师徒两人对话贯穿全程</div>
+          <div class="feat-checks">
+            <div class="feat-check"><span class="ck">✓</span> 场景先行</div>
+            <div class="feat-check"><span class="ck">✓</span> 原理后置</div>
+            <div class="feat-check"><span class="ck">✓</span> 类比贯穿</div>
+          </div>
+        </div>
+        <div class="feat-card anim-scale d4">
+          <div class="feat-tag">ENGINEERING</div>
+          <div class="feat-name">工程化</div>
+          <div class="feat-desc">React · Node.js · Python 三类真实项目配置</div>
+          <div class="feat-checks">
+            <div class="feat-check"><span class="ck">✓</span> 可复用配置</div>
+            <div class="feat-check"><span class="ck">✓</span> 实战范例</div>
+            <div class="feat-check"><span class="ck">✓</span> 直接落地</div>
+          </div>
+        </div>
+        <div class="feat-card anim-scale d5">
+          <div class="feat-tag">PROGRESSIVE</div>
+          <div class="feat-name">递进式</div>
+          <div class="feat-desc">从被动使用到主动编排 · 层层深入</div>
+          <div class="feat-checks">
+            <div class="feat-check"><span class="ck">✓</span> 层层深入</div>
+            <div class="feat-check"><span class="ck">✓</span> 打地基</div>
+            <div class="feat-check"><span class="ck">✓</span> 范式跃迁</div>
+          </div>
+        </div>
+        <div class="feat-card anim-scale d6">
+          <div class="feat-tag">VISUAL</div>
+          <div class="feat-name">可视化</div>
+          <div class="feat-desc">液态玻璃 HUD · 大量结构图与决策树</div>
+          <div class="feat-checks">
+            <div class="feat-check"><span class="ck">✓</span> 结构图</div>
+            <div class="feat-check"><span class="ck">✓</span> 决策树</div>
+            <div class="feat-check"><span class="ck">✓</span> 对比表</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 9: 三类读者 ==================== -->
+    <div class="slide" data-idx="9">
+      <div class="tag anim-up">AUDIENCE · 目标读者</div>
+      <h2 class="slide-title anim-up d1">
+        为谁准备 · <span class="cyan">三类目标读者</span>
+      </h2>
+      <div class="slide-subtitle anim-up d2">你 属 于 哪 一 类 ？</div>
+      <div class="divider anim-in d3"></div>
+      <div class="reader-grid">
+        <div class="reader-card anim-scale d3">
+          <div class="reader-icon">🧑‍💻</div>
+          <div class="reader-role">USER</div>
+          <div class="reader-name">AI 工具使用者</div>
+          <div class="reader-desc">想榨出 Claude 真正的潜力</div>
+          <div class="reader-checks">
+            <div class="reader-check"><span class="rk">✓</span> 每天写代码</div>
+            <div class="reader-check"><span class="rk">✓</span> 总觉得差点意思</div>
+            <div class="reader-check"><span class="rk">✓</span> 想升级用法</div>
+          </div>
+        </div>
+        <div class="reader-card anim-scale d4">
+          <div class="reader-icon">🏗️</div>
+          <div class="reader-role">ARCHITECT</div>
+          <div class="reader-name">团队架构师</div>
+          <div class="reader-desc">规范、成本、安全的落地负责人</div>
+          <div class="reader-checks">
+            <div class="reader-check"><span class="rk">✓</span> 引入团队</div>
+            <div class="reader-check"><span class="rk">✓</span> 规范统一</div>
+            <div class="reader-check"><span class="rk">✓</span> 成本可控</div>
+          </div>
+        </div>
+        <div class="reader-card anim-scale d5">
+          <div class="reader-icon">🔧</div>
+          <div class="reader-role">BUILDER</div>
+          <div class="reader-name">产品构建者</div>
+          <div class="reader-desc">用 Agent SDK 嵌入自己的产品</div>
+          <div class="reader-checks">
+            <div class="reader-check"><span class="rk">✓</span> SDK 集成</div>
+            <div class="reader-check"><span class="rk">✓</span> 自动化</div>
+            <div class="reader-check"><span class="rk">✓</span> 工程化 API</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 10: 四件礼物 ==================== -->
+    <div class="slide" data-idx="10">
+      <div class="tag anim-up">TAKEAWAYS · 学完获得</div>
+      <h2 class="slide-title anim-up d1">
+        学完你将获得 · <span class="gold">四件礼物</span>
+      </h2>
+      <div class="slide-subtitle anim-up d2">不是知识 · 是能力 · 是范式</div>
+      <div class="divider anim-in d3"></div>
+      <div class="gift-grid">
+        <div class="gift-card anim-scale d3">
+          <div class="gift-num">01</div>
+          <div class="gift-title">Harness 思维模型</div>
+          <div class="gift-desc">看懂任何 Agent 类工具的本质</div>
+        </div>
+        <div class="gift-card anim-scale d4">
+          <div class="gift-num">02</div>
+          <div class="gift-title">八种核心机制</div>
+          <div class="gift-desc">覆盖记忆 / 扩展 / 集成 / 编程四层</div>
+        </div>
+        <div class="gift-card anim-scale d5">
+          <div class="gift-num">03</div>
+          <div class="gift-title">实战清单</div>
+          <div class="gift-desc">成本 / 安全 / 治理可直接复用</div>
+        </div>
+        <div class="gift-card anim-scale d6">
+          <div class="gift-num">04</div>
+          <div class="gift-title">范式跃迁</div>
+          <div class="gift-desc">从被动使用到主动驾驭</div>
+        </div>
+      </div>
+      <div class="gift-verdict anim-up d7">这才是 AI 时代真正的差距来源</div>
+    </div>
+
+    <!-- ==================== SLIDE 11: 即将开启 ==================== -->
+    <div class="slide" data-idx="11">
+      <div class="next-icon anim-in d1">▶</div>
+      <div class="tag anim-up d1">NEXT EPISODE · 下一章</div>
+      <h2 class="next-title anim-scale d2">第一章 · 即将开启</h2>
+      <div class="next-chapter anim-up d3">Claude Code 技术架构全景</div>
+      <div class="divider anim-in d4"></div>
+      <div class="next-checks">
+        <div class="next-check anim-up d4">
+          <span class="nc-icon">✓</span> 冰山隐喻 · 看清表面与深层
+        </div>
+        <div class="next-check anim-up d5">
+          <span class="nc-icon">✓</span> 摩天大楼 · 四层架构全图
+        </div>
+        <div class="next-check anim-up d6">
+          <span class="nc-icon">✓</span> 核心公式 · Agent = Model + Harness
+        </div>
+      </div>
+      <div class="next-cta anim-in d7">STAY TUNED · 故事即将开始</div>
+    </div>
+
+  </div><!-- /deck -->
+
+  <!-- NAV -->
+  <div class="nav" id="nav">
+    <button id="prevBtn" title="上一页">‹</button>
+    <div class="dots" id="dots"></div>
+    <div class="page-info" id="pageInfo">2 / 11</div>
+    <button id="nextBtn" title="下一页">›</button>
+  </div>
+
+  <script>
+    // ========== SNOWFLAKE GENERATOR ==========
+    (function createSnow() {
+      const field = document.getElementById('snowfield');
+      const count = 45;
+      for (let i = 0; i < count; i++) {
+        const flake = document.createElement('div');
+        flake.className = 'snowflake';
+        const size = 1.5 + Math.random() * 4;
+        const left = Math.random() * 100;
+        const dur = 10 + Math.random() * 18;
+        const sway = 3 + Math.random() * 6;
+        const delay = Math.random() * dur;
+        const opacity = 0.15 + Math.random() * 0.5;
+        flake.style.cssText =
+          'width:' + size + 'px;height:' + size + 'px;' +
+          'left:' + left + '%;' +
+          'opacity:' + opacity + ';' +
+          'animation-duration:' + dur + 's,' + sway + 's;' +
+          'animation-delay:' + delay + 's,' + (delay * 0.4) + 's;';
+        field.appendChild(flake);
+      }
+    })();
+
+    // ========== DECK ENGINE ==========
+    const slides = Array.from(document.querySelectorAll('.slide'));
+    const totalSlides = slides.length; // 11 (slide 1~11)
+    let current = 0;
+
+    const dotsContainer = document.getElementById('dots');
+    const pageInfo = document.getElementById('pageInfo');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+
+    // Create dots
+    slides.forEach((_, i) => {
+      const dot = document.createElement('div');
+      dot.className = 'dot' + (i === 0 ? ' active' : '');
+      dot.addEventListener('click', () => goTo(i));
+      dotsContainer.appendChild(dot);
+    });
+
+    function goTo(idx) {
+      if (idx < 0 || idx >= totalSlides) return;
+      slides[current].classList.remove('active');
+      current = idx;
+      slides[current].classList.add('active');
+      // Reset animations
+      slides[current].querySelectorAll('[class*="anim-"]').forEach(el => {
+        el.style.animation = 'none';
+        el.offsetHeight; // reflow
+        el.style.animation = '';
+      });
+      // Also reset cover-specific animations
+      slides[current].querySelectorAll('.cover-title, .cover-divider, .cover-formula, .cover-footnote, .cover-explain').forEach(el => {
+        el.style.animation = 'none';
+        el.offsetHeight;
+        el.style.animation = '';
+      });
+      updateNav();
+      savePos();
+    }
+
+    function updateNav() {
+      const slideNum = current + 1;
+      pageInfo.textContent = slideNum + ' / ' + totalSlides;
+      dotsContainer.querySelectorAll('.dot').forEach((d, i) => {
+        d.classList.toggle('active', i === current);
+      });
+    }
+
+    prevBtn.addEventListener('click', () => goTo(current - 1));
+    nextBtn.addEventListener('click', () => goTo(current + 1));
+
+    // Keyboard nav
+    document.addEventListener('keydown', e => {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') {
+        e.preventDefault();
+        goTo(current + 1);
+      }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        goTo(current - 1);
+      }
+      if (e.key === 'Home') { e.preventDefault(); goTo(0); }
+      if (e.key === 'End')  { e.preventDefault(); goTo(totalSlides - 1); }
+    });
+
+    // Persist position
+    function savePos() {
+      try { localStorage.setItem('preface-slide', current); } catch(e) {}
+    }
+    function loadPos() {
+      try {
+        const saved = parseInt(localStorage.getItem('preface-slide'), 10);
+        if (!isNaN(saved) && saved >= 0 && saved < totalSlides) {
+          goTo(saved);
+          return true;
+        }
+      } catch(e) {}
+      return false;
+    }
+
+    // Responsive scale
+    function rescale() {
+      const deck = document.getElementById('deck');
+      const padX = 40, padY = 120;
+      const scale = Math.min(
+        (window.innerWidth - padX) / 1920,
+        (window.innerHeight - padY) / 1080
+      );
+      deck.style.transform = 'scale(' + scale + ')';
+    }
+    window.addEventListener('resize', rescale);
+    rescale();
+
+    // Init — show slide 1 (cover), restore saved position if any
+    if (!loadPos()) goTo(0);
+  </script>
+</body>
+</html>

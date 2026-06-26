@@ -1,0 +1,2938 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>第 1 章 · Claude Code 技术架构全景 · 1/27</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    /*
+     * DESIGN SYSTEM — inherited from 模板.html
+     * Colors: --gold #FFD700 / --cyan #00F3FF / --magenta #FF00C8 / --dark #0A0A0A
+     * Fonts:  Orbitron (titles) · Inter (body) · JetBrains Mono (code/labels)
+     * Visual: grid background + snowflake particles + glow animations
+     */
+
+    :root {
+      --gold: #FFD700;
+      --cyan: #00F3FF;
+      --magenta: #FF00C8;
+      --dark: #0A0A0A;
+      --dark-card: rgba(15, 15, 20, 0.85);
+      --grid: rgba(40, 40, 40, 0.4);
+      --text: #E8E8E8;
+      --text-dim: rgba(255, 255, 255, 0.55);
+      --gold-glow: rgba(255, 215, 0, 0.6);
+      --cyan-glow: rgba(0, 243, 255, 0.6);
+      --magenta-glow: rgba(255, 0, 200, 0.6);
+      --red: #FF4D4D;
+      --green: #00C878;
+      --purple: #B482FF;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--dark);
+      font-family: 'Inter', sans-serif;
+      color: white;
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    /* ===== GRID BACKGROUND ===== */
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+      background-size: 32px 32px;
+      z-index: 0;
+      animation: gridPulse 6s infinite alternate;
+    }
+    @keyframes gridPulse { 0% { opacity: .6; } 100% { opacity: .85; } }
+
+    /* ===== SNOWFLAKES ===== */
+    .snowflake {
+      position: fixed;
+      border-radius: 50%;
+      background: white;
+      pointer-events: none;
+      z-index: 1;
+      animation: snowfall linear infinite, snowSway ease-in-out infinite;
+    }
+    @keyframes snowfall {
+      0%   { top: -8px; opacity: 0; }
+      5%   { opacity: 1; }
+      92%  { opacity: .8; }
+      100% { top: 105vh; opacity: 0; }
+    }
+    @keyframes snowSway {
+      0%,100% { transform: translateX(0) rotate(0); }
+      25%     { transform: translateX(18px) rotate(90deg); }
+      50%     { transform: translateX(-12px) rotate(180deg); }
+      75%     { transform: translateX(22px) rotate(270deg); }
+    }
+
+    /* ===== DECK ===== */
+    .deck {
+      width: 1920px;
+      height: 1080px;
+      position: relative;
+      transform-origin: center center;
+      z-index: 10;
+    }
+
+    /* ===== SLIDE BASE ===== */
+    .slide {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 80px 100px 100px 150px;
+      text-align: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .5s ease;
+    }
+    .slide.active { opacity: 1; pointer-events: auto; }
+    .slide:not(.active) { display: none !important; }
+
+    /* ===== SHARED TYPOGRAPHY ===== */
+    .tag {
+      display: inline-block;
+      background: rgba(0,30,50,.6);
+      border: 1px solid rgba(0,200,255,.3);
+      border-radius: 20px;
+      padding: 8px 24px;
+      font-size: 1rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--cyan);
+      margin-bottom: 24px;
+    }
+
+    .slide-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 3.6rem;
+      font-weight: 700;
+      margin: 12px 0 8px;
+      line-height: 1.15;
+    }
+    .slide-title .gold   { color: var(--gold); text-shadow: 0 0 14px var(--gold-glow); }
+    .slide-title .cyan   { color: var(--cyan); text-shadow: 0 0 14px var(--cyan-glow); }
+    .slide-title .magenta{ color: var(--magenta); text-shadow: 0 0 14px var(--magenta-glow); }
+
+    .slide-subtitle {
+      font-size: 1.5rem;
+      font-weight: 400;
+      color: var(--text-dim);
+      letter-spacing: 1px;
+      margin-bottom: 12px;
+    }
+    .slide-subtitle-en {
+      font-size: 1.05rem;
+      color: var(--text-dim);
+      opacity: .6;
+      letter-spacing: 2px;
+      margin-bottom: 24px;
+    }
+    .divider {
+      width: 120px;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--gold), transparent);
+      margin: 20px auto 28px;
+    }
+
+    /* ===== NAV ===== */
+    .nav {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      z-index: 100;
+      background: rgba(10,10,10,.8);
+      border: 1px solid rgba(255,255,255,.1);
+      border-radius: 40px;
+      padding: 10px 28px;
+      backdrop-filter: blur(10px);
+    }
+    .nav button {
+      background: none;
+      border: 1px solid rgba(255,255,255,.2);
+      color: white;
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 1.1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all .2s;
+    }
+    .nav button:hover {
+      border-color: var(--cyan);
+      color: var(--cyan);
+      box-shadow: 0 0 10px var(--cyan-glow);
+    }
+    .nav .page-info {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .85rem;
+      color: var(--text-dim);
+      min-width: 90px;
+      text-align: center;
+    }
+    .nav .dots { display: flex; gap: 6px; }
+    .nav .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: rgba(255,255,255,.2);
+      cursor: pointer;
+      transition: all .3s;
+    }
+    .nav .dot.active {
+      background: var(--cyan);
+      box-shadow: 0 0 8px var(--cyan-glow);
+    }
+
+    /* ===== ANIMATIONS ===== */
+    @keyframes fadeInUp  { from { opacity:0; transform:translateY(24px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes fadeIn    { from { opacity:0; } to { opacity:1; } }
+    @keyframes scaleIn   { from { opacity:0; transform:scale(.85); } to { opacity:1; transform:scale(1); } }
+    @keyframes slideInL  { from { opacity:0; transform:translateX(-40px); } to { opacity:1; transform:translateX(0); } }
+    @keyframes slideInR  { from { opacity:0; transform:translateX(40px); } to { opacity:1; transform:translateX(0); } }
+    @keyframes arrowPulse { 0%,100% { opacity:.5; transform:scale(1); } 50% { opacity:1; transform:scale(1.15); } }
+    @keyframes ctaPulse  { 0%,100% { opacity:.5; } 50% { opacity:1; text-shadow:0 0 16px var(--cyan-glow); } }
+    @keyframes formulaReveal {
+      0%   { opacity:0; transform:translateY(20px); }
+      50%  { opacity:.6; }
+      100% { opacity:1; transform:translateY(0); text-shadow:0 0 10px rgba(255,215,0,.3),0 0 16px var(--cyan),0 0 16px var(--magenta); }
+    }
+    @keyframes titleGlow {
+      0%   { opacity:0; transform:scale(.8); }
+      60%  { opacity:.8; }
+      100% { opacity:1; transform:scale(1); text-shadow:0 0 12px var(--gold),0 0 20px var(--gold),0 0 12px var(--cyan),0 0 20px var(--cyan),0 0 12px var(--magenta),0 0 20px var(--magenta); }
+    }
+    @keyframes ringDraw { from { stroke-dashoffset: 283; } to { stroke-dashoffset: 255; } }
+    @keyframes pulse { 0%,100% { opacity:.7; } 50% { opacity:1; } }
+
+    .anim-up    { animation: fadeInUp .6s ease-out both; }
+    .anim-in    { animation: fadeIn .6s ease-out both; }
+    .anim-scale { animation: scaleIn .7s ease-out both; }
+    .anim-left  { animation: slideInL .6s ease-out both; }
+    .anim-right { animation: slideInR .6s ease-out both; }
+    .d1 { animation-delay: .1s; } .d2 { animation-delay: .25s; } .d3 { animation-delay: .4s; }
+    .d4 { animation-delay: .55s; } .d5 { animation-delay: .7s; } .d6 { animation-delay: .85s; }
+    .d7 { animation-delay: 1s; } .d8 { animation-delay: 1.15s; }
+
+    /* ===================== SLIDE 1: CHAPTER COVER ===================== */
+    .ch-cover-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 5rem;
+      font-weight: 700;
+      margin: 24px 0;
+      line-height: 1.1;
+      animation: titleGlow 1.2s ease-out both;
+    }
+    .ch-cover-title .ct1 { color: var(--gold); text-shadow: 0 0 18px var(--gold-glow); }
+    .ch-cover-title .ct2 { color: var(--cyan); text-shadow: 0 0 18px var(--cyan-glow); }
+    .ch-cover-title .ct3 { color: var(--magenta); text-shadow: 0 0 18px var(--magenta-glow); }
+    .ch-cover-sub {
+      font-size: 2.6rem;
+      font-weight: 600;
+      margin: 28px 0;
+      letter-spacing: 1px;
+    }
+    .ch-cover-ch {
+      font-size: 2rem;
+      color: var(--gold);
+      margin: 12px 0 8px;
+    }
+    .ch-cover-en {
+      font-size: 1.2rem;
+      color: var(--text-dim);
+      letter-spacing: 2px;
+    }
+    .ch-cover-divider {
+      width: 120px;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--gold), transparent);
+      margin: 30px auto;
+      animation: slideIn .7s ease-out 1.2s both;
+    }
+    @keyframes slideIn { from { width: 0; } to { width: 120px; } }
+
+    /* ===================== SLIDE 2: PROBLEM ===================== */
+    .problem-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 60px;
+      width: 100%;
+      max-width: 1500px;
+      text-align: left;
+      align-items: start;
+    }
+    .problem-left .pl-title {
+      font-size: 3.4rem;
+      font-weight: 700;
+      margin-bottom: 14px;
+    }
+    .problem-left .pl-role {
+      font-size: 1.25rem;
+      color: var(--text-dim);
+      margin-bottom: 30px;
+    }
+    .problem-quote {
+      background: rgba(255,255,255,.04);
+      border-left: 3px solid var(--gold);
+      border-radius: 0 12px 12px 0;
+      padding: 28px 32px;
+      font-size: 1.3rem;
+      line-height: 1.7;
+      color: var(--text-dim);
+      font-style: italic;
+    }
+    .problem-quote em { color: var(--gold); font-style: normal; font-weight: 600; }
+    .problem-right { display: flex; flex-direction: column; gap: 22px; }
+    .problem-card {
+      background: var(--dark-card);
+      border: 1px solid rgba(255,255,255,.06);
+      border-radius: 14px;
+      padding: 30px 30px;
+      transition: border-color .3s, transform .3s;
+    }
+    .problem-card:hover { transform: translateX(6px); }
+    .problem-card.pc-red   { border-left: 4px solid var(--red); }
+    .problem-card.pc-gold  { border-left: 4px solid var(--gold); }
+    .problem-card.pc-cyan  { border-left: 4px solid var(--cyan); }
+    .problem-card.pc-red:hover  { border-color: var(--red); }
+    .problem-card.pc-gold:hover { border-color: var(--gold); }
+    .problem-card.pc-cyan:hover { border-color: var(--cyan); }
+    .problem-card .pc-head {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+    .problem-card .pc-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .problem-card.pc-red  .pc-dot { background: var(--red); }
+    .problem-card.pc-gold .pc-dot { background: var(--gold); }
+    .problem-card.pc-cyan .pc-dot { background: var(--cyan); }
+    .problem-card .pc-name {
+      font-size: 1.5rem;
+      font-weight: 700;
+    }
+    .problem-card.pc-red  .pc-name { color: var(--red); }
+    .problem-card.pc-gold .pc-name { color: var(--gold); }
+    .problem-card.pc-cyan .pc-name { color: var(--cyan); }
+    .problem-card .pc-desc {
+      font-size: 1.15rem;
+      color: var(--text-dim);
+      line-height: 1.6;
+      padding-left: 20px;
+    }
+
+    /* ===================== SLIDE 3: THREE QUESTIONS ===================== */
+    .questions-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 60px;
+      width: 100%;
+      max-width: 1500px;
+      text-align: left;
+      align-items: start;
+    }
+    .ql-quote {
+      background: rgba(255,255,255,.04);
+      border-left: 3px solid var(--cyan);
+      border-radius: 0 12px 12px 0;
+      padding: 28px 32px;
+      font-size: 1.2rem;
+      line-height: 1.7;
+      color: var(--text-dim);
+      font-style: italic;
+      margin-top: 30px;
+    }
+    .questions-right .qr-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .95rem;
+      letter-spacing: 2px;
+      color: var(--cyan);
+      margin-bottom: 22px;
+    }
+    .questions-right .qr-list {
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+    }
+    .q-item {
+      background: var(--dark-card);
+      border: 1px solid rgba(255,255,255,.06);
+      border-radius: 14px;
+      padding: 28px 30px;
+      display: flex;
+      align-items: flex-start;
+      gap: 20px;
+      transition: border-color .3s, transform .3s;
+    }
+    .q-item:hover { transform: translateX(6px); }
+    .q-item:nth-child(1) { border-left: 4px solid var(--cyan); }
+    .q-item:nth-child(2) { border-left: 4px solid var(--gold); }
+    .q-item:nth-child(3) { border-left: 4px solid var(--red); }
+    .q-item:nth-child(1):hover { border-color: var(--cyan); }
+    .q-item:nth-child(2):hover { border-color: var(--gold); }
+    .q-item:nth-child(3):hover { border-color: var(--red); }
+    .q-num {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.6rem;
+      font-weight: 700;
+      flex-shrink: 0;
+      width: 40px;
+    }
+    .q-item:nth-child(1) .q-num { color: var(--cyan); }
+    .q-item:nth-child(2) .q-num { color: var(--gold); }
+    .q-item:nth-child(3) .q-num { color: var(--red); }
+    .q-text {
+      font-size: 1.4rem;
+      line-height: 1.5;
+    }
+    .q-text strong { color: var(--gold); }
+
+    /* ===================== SLIDE 4: TRUTH REVEAL ===================== */
+    .truth-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 60px;
+      width: 100%;
+      max-width: 1500px;
+      text-align: left;
+      align-items: center;
+    }
+    .truth-left { text-align: center; }
+    .truth-big {
+      font-size: 8rem;
+      font-weight: 800;
+      font-family: 'Orbitron', sans-serif;
+      color: var(--gold);
+      text-shadow: 0 0 30px var(--gold-glow);
+      line-height: 1;
+    }
+    .truth-big-sub {
+      font-size: 1.6rem;
+      color: var(--text-dim);
+      margin-top: 12px;
+    }
+    .truth-ring {
+      margin: 30px auto;
+      width: 160px;
+      height: 160px;
+    }
+    .truth-ring circle {
+      fill: none;
+      stroke-width: 6;
+      transform-origin: center;
+      transform: rotate(-90deg);
+    }
+    .truth-ring .bg { stroke: rgba(255,255,255,.08); }
+    .truth-ring .fg {
+      stroke: var(--gold);
+      stroke-dasharray: 283;
+      stroke-dashoffset: 255;
+      stroke-linecap: round;
+      animation: ringDraw 1.5s ease-out .5s both;
+    }
+    .truth-right .tr-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .95rem;
+      letter-spacing: 2px;
+      color: var(--cyan);
+      margin-bottom: 10px;
+    }
+    .truth-right .tr-sub {
+      font-size: 1.3rem;
+      color: var(--text-dim);
+      margin-bottom: 28px;
+    }
+    .truth-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .truth-item {
+      background: var(--dark-card);
+      border: 1px solid rgba(255,255,255,.06);
+      border-radius: 12px;
+      padding: 24px;
+      transition: border-color .3s;
+    }
+    .truth-item:hover { border-color: rgba(0,243,255,.3); }
+    .truth-item .ti-icon { font-size: 1.5rem; margin-bottom: 10px; }
+    .truth-item .ti-name {
+      font-size: 1.15rem;
+      font-weight: 600;
+      color: var(--cyan);
+      margin-bottom: 6px;
+    }
+    .truth-item .ti-desc {
+      font-size: .95rem;
+      color: var(--text-dim);
+    }
+
+    /* ===================== SLIDE 5: ICEBERG ===================== */
+    .iceberg-slide {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+    }
+    .iceberg-layout {
+      display: grid;
+      grid-template-columns: 260px 220px 1fr;
+      gap: 120px;
+      width: 100%;
+      max-width: 1600px;
+      text-align: left;
+      align-items: start;
+    }
+    .iceberg-left {
+      align-self: center;
+    }
+    .iceberg-left .il-title {
+      font-size: 3.4rem;
+      font-weight: 700;
+      margin-bottom: 16px;
+      white-space: nowrap;
+    }
+    .iceberg-left .il-desc {
+      font-size: 1.35rem;
+      color: var(--text-dim);
+      line-height: 1.7;
+    }
+    /* ===== ICEBERG SVG VISUAL ===== */
+    .iceberg-visual {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+    }
+    .iceberg-svg {
+      width: 220px;
+      height: 500px;
+      filter: drop-shadow(0 0 24px rgba(0,243,255,.15));
+    }
+    .iceberg-above {
+      fill: rgba(0,243,255,.12);
+      stroke: rgba(0,243,255,.5);
+      stroke-width: 1.5;
+    }
+    .iceberg-below {
+      fill: rgba(255,0,200,.08);
+      stroke: rgba(255,0,200,.35);
+      stroke-width: 1.5;
+    }
+    .waterline {
+      stroke: rgba(0,243,255,.4);
+      stroke-width: 1.2;
+      stroke-dasharray: 8 4;
+    }
+    .iceberg-label-above, .iceberg-label-below {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .7rem;
+      letter-spacing: 1px;
+      fill: currentColor;
+    }
+    .iceberg-label-above { fill: var(--cyan); }
+    .iceberg-label-below { fill: var(--magenta); }
+    .iceberg-pct {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1rem;
+      font-weight: 700;
+    }
+    .iceberg-pct.above { fill: var(--cyan); }
+    .iceberg-pct.below { fill: var(--magenta); }
+    .iceberg-right {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      height: 500px;
+    }
+    .iceberg-section {
+      padding: 28px 32px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .iceberg-section.above { flex: 36; }
+    .iceberg-section.below { flex: 64; }
+    .iceberg-section.above {
+      background: rgba(0,243,255,.05);
+      border: 1px solid rgba(0,243,255,.12);
+      border-radius: 14px 14px 0 0;
+      border-bottom: 2px dashed rgba(0,243,255,.3);
+    }
+    .iceberg-section.below {
+      background: rgba(255,0,200,.04);
+      border: 1px solid rgba(255,0,200,.12);
+      border-radius: 0 0 14px 14px;
+      border-top: none;
+    }
+    .iceberg-section .is-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1rem;
+      letter-spacing: 2px;
+      margin-bottom: 18px;
+    }
+    .iceberg-section.above .is-label { color: var(--cyan); }
+    .iceberg-section.below .is-label { color: var(--magenta); }
+    .iceberg-section .is-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .iceberg-row {
+      display: flex;
+      gap: 16px;
+      font-size: 1.2rem;
+    }
+    .iceberg-row .ir-name {
+      font-weight: 600;
+      min-width: 130px;
+      white-space: nowrap;
+    }
+    .iceberg-section.above .ir-name { color: var(--cyan); }
+    .iceberg-section.below .ir-name { color: var(--magenta); }
+    .iceberg-row .ir-desc { color: var(--text-dim); }
+
+    /* ===================== SLIDE 6: EIGHT KEYS ===================== */
+    .keys-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+      width: 100%;
+      max-width: 1500px;
+      margin-top: 10px;
+    }
+    .key-card {
+      background: var(--dark-card);
+      border: 1px solid rgba(255,255,255,.06);
+      border-radius: 14px;
+      padding: 32px 24px;
+      text-align: center;
+      transition: border-color .3s, transform .3s;
+    }
+    .key-card:hover { transform: translateY(-4px); }
+    .key-card .kc-icon { font-size: 2rem; margin-bottom: 14px; }
+    .key-card .kc-name {
+      font-size: 1.3rem;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+    .key-card .kc-val {
+      font-size: 1.05rem;
+      color: var(--text-dim);
+    }
+    .key-card:nth-child(1) { border-top: 3px solid var(--gold); }
+    .key-card:nth-child(1) .kc-name { color: var(--gold); }
+    .key-card:nth-child(2) { border-top: 3px solid var(--cyan); }
+    .key-card:nth-child(2) .kc-name { color: var(--cyan); }
+    .key-card:nth-child(3) { border-top: 3px solid var(--magenta); }
+    .key-card:nth-child(3) .kc-name { color: var(--magenta); }
+    .key-card:nth-child(4) { border-top: 3px solid var(--green); }
+    .key-card:nth-child(4) .kc-name { color: var(--green); }
+    .key-card:nth-child(5) { border-top: 3px solid var(--purple); }
+    .key-card:nth-child(5) .kc-name { color: var(--purple); }
+    .key-card:nth-child(6) { border-top: 3px solid var(--cyan); }
+    .key-card:nth-child(6) .kc-name { color: var(--cyan); }
+    .key-card:nth-child(7) { border-top: 3px solid var(--gold); }
+    .key-card:nth-child(7) .kc-name { color: var(--gold); }
+    .key-card:nth-child(8) { border-top: 3px solid var(--magenta); }
+    .key-card:nth-child(8) .kc-name { color: var(--magenta); }
+    .key-card:nth-child(1):hover { border-color: var(--gold); }
+    .key-card:nth-child(2):hover { border-color: var(--cyan); }
+    .key-card:nth-child(3):hover { border-color: var(--magenta); }
+    .key-card:nth-child(4):hover { border-color: var(--green); }
+    .key-card:nth-child(5):hover { border-color: var(--purple); }
+    .key-card:nth-child(6):hover { border-color: var(--cyan); }
+    .key-card:nth-child(7):hover { border-color: var(--gold); }
+    .key-card:nth-child(8):hover { border-color: var(--magenta); }
+
+    /* ===================== SLIDE 7: PARADIGM SHIFT ===================== */
+    .paradigm-layout {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 50px;
+      width: 100%;
+      max-width: 1500px;
+      align-items: start;
+      text-align: left;
+    }
+    .paradigm-side {
+      background: var(--dark-card);
+      border: 1px solid rgba(255,255,255,.06);
+      border-radius: 18px;
+      padding: 44px 40px;
+    }
+    .paradigm-side.left { border-color: rgba(255,77,77,.15); }
+    .paradigm-side.right { border-color: rgba(0,243,255,.2); box-shadow: 0 0 30px rgba(0,243,255,.06); }
+    .paradigm-side .ps-icon { font-size: 1.6rem; margin-bottom: 14px; }
+    .paradigm-side .ps-title {
+      font-size: 1.8rem;
+      font-weight: 700;
+      margin-bottom: 28px;
+    }
+    .paradigm-side.left .ps-title { color: var(--red); }
+    .paradigm-side.right .ps-title { color: var(--cyan); }
+    .paradigm-side .ps-list {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+    .paradigm-side .ps-item {
+      font-size: 1.3rem;
+      line-height: 1.5;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .paradigm-side.left .ps-item { color: rgba(255,255,255,.45); }
+    .paradigm-side.right .ps-item { color: var(--text); }
+    .paradigm-side .ps-item .pi-mark {
+      font-size: .9rem;
+      flex-shrink: 0;
+      width: 20px;
+      text-align: center;
+    }
+    .paradigm-side.left .pi-mark { color: var(--red); }
+    .paradigm-side.right .pi-mark { color: var(--green); }
+    .paradigm-side .ps-result {
+      font-size: 1.05rem;
+      letter-spacing: 2px;
+    }
+    .paradigm-side.left .ps-result { color: var(--red); opacity: .7; }
+    .paradigm-side.right .ps-result { color: var(--gold); }
+    .paradigm-arrow-col {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding-top: 100px;
+    }
+    .paradigm-arrow-col .pa-arrow {
+      font-size: 3.5rem;
+      color: var(--cyan);
+      text-shadow: 0 0 20px var(--cyan-glow);
+      animation: arrowPulse 2s infinite;
+    }
+
+    /* ===================== SLIDE 8: ENGINEERING THOUGHT ===================== */
+    .eng-layout {
+      text-align: center;
+      max-width: 1400px;
+    }
+    .eng-title {
+      font-size: 3rem;
+      font-weight: 700;
+      margin-bottom: 12px;
+      background: linear-gradient(90deg, var(--gold), var(--cyan), var(--green));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .eng-principle {
+      font-size: 1.3rem;
+      color: var(--text-dim);
+      letter-spacing: 2px;
+      margin-bottom: 44px;
+    }
+    .eng-cards {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 28px;
+    }
+    .eng-card {
+      background: var(--dark-card);
+      border: 1px solid rgba(255,255,255,.06);
+      border-radius: 18px;
+      padding: 48px 36px;
+      transition: border-color .3s, transform .3s;
+    }
+    .eng-card:hover { transform: translateY(-4px); }
+    .eng-card:nth-child(1) { border-top: 3px solid var(--gold); }
+    .eng-card:nth-child(2) { border-top: 3px solid var(--cyan); }
+    .eng-card:nth-child(3) { border-top: 3px solid var(--green); }
+    .eng-card:nth-child(1):hover { border-color: var(--gold); }
+    .eng-card:nth-child(2):hover { border-color: var(--cyan); }
+    .eng-card:nth-child(3):hover { border-color: var(--green); }
+    .eng-card .ec-icon { font-size: 2.5rem; margin-bottom: 18px; }
+    .eng-card .ec-name {
+      font-size: 2.3rem;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+    .eng-card:nth-child(1) .ec-name { color: var(--gold); }
+    .eng-card:nth-child(2) .ec-name { color: var(--cyan); }
+    .eng-card:nth-child(3) .ec-name { color: var(--green); }
+    .eng-card .ec-desc {
+      font-size: 1.35rem;
+      color: var(--text-dim);
+    }
+
+    /* ===================== SLIDE 9: FOUR LAYERS ===================== */
+    .arch-layout {
+      display: grid;
+      grid-template-columns: 1fr 1.2fr;
+      gap: 60px;
+      width: 100%;
+      max-width: 1500px;
+      text-align: left;
+      align-items: center;
+    }
+    .arch-left .al-title {
+      font-size: 3.2rem;
+      font-weight: 700;
+      margin-bottom: 14px;
+    }
+    .arch-left .al-desc {
+      font-size: 1.3rem;
+      color: var(--text-dim);
+      line-height: 1.7;
+    }
+    .arch-right { display: flex; flex-direction: column; gap: 14px; }
+    .arch-layer {
+      display: grid;
+      grid-template-columns: 80px 1fr;
+      gap: 28px;
+      align-items: center;
+      background: var(--dark-card);
+      border: 1px solid rgba(255,255,255,.06);
+      border-radius: 14px;
+      padding: 28px 36px;
+      transition: border-color .3s, transform .3s;
+    }
+    .arch-layer:hover { transform: translateX(6px); }
+    .arch-layer.al-1 { border-left: 4px solid #888; }
+    .arch-layer.al-2 { border-left: 4px solid var(--gold); }
+    .arch-layer.al-3 { border-left: 4px solid var(--cyan); }
+    .arch-layer.al-4 { border-left: 4px solid var(--magenta); }
+    .arch-layer.al-1:hover { border-color: #aaa; }
+    .arch-layer.al-2:hover { border-color: var(--gold); }
+    .arch-layer.al-3:hover { border-color: var(--cyan); }
+    .arch-layer.al-4:hover { border-color: var(--magenta); }
+    .arch-layer .arl-icon { font-size: 1.8rem; text-align: center; }
+    .arch-layer .arl-content { display: flex; align-items: center; gap: 16px; }
+    .arch-layer .arl-name {
+      font-size: 1.3rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .arch-layer.al-1 .arl-name { color: #aaa; }
+    .arch-layer.al-2 .arl-name { color: var(--gold); }
+    .arch-layer.al-3 .arl-name { color: var(--cyan); }
+    .arch-layer.al-4 .arl-name { color: var(--magenta); }
+    .arch-layer .arl-dot {
+      width: 4px; height: 4px;
+      border-radius: 50%;
+      background: var(--text-dim);
+      flex-shrink: 0;
+    }
+    .arch-layer .arl-desc {
+      font-size: 1.1rem;
+      color: var(--text-dim);
+    }
+
+    /* ===================== SLIDE 10: MEMORY LAYER ===================== */
+    .memory-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 60px;
+      width: 100%;
+      max-width: 1500px;
+      text-align: left;
+      align-items: start;
+    }
+    .memory-left .ml-big {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 4rem;
+      font-weight: 700;
+      color: var(--gold);
+      text-shadow: 0 0 20px var(--gold-glow);
+      margin-bottom: 12px;
+    }
+    .memory-left .ml-def {
+      font-size: 1.5rem;
+      color: var(--text-dim);
+      margin-bottom: 34px;
+      line-height: 1.6;
+    }
+    .memory-left .ml-uses {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .memory-left .ml-use {
+      font-size: 1.3rem;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .memory-left .ml-use .mu-arrow { color: var(--gold); flex-shrink: 0; }
+    .memory-right .mr-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .95rem;
+      letter-spacing: 2px;
+      color: var(--cyan);
+      margin-bottom: 22px;
+    }
+    .memory-right .mr-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .mem-level {
+      background: var(--dark-card);
+      border: 1px solid rgba(255,255,255,.06);
+      border-radius: 10px;
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      transition: border-color .3s, transform .3s;
+    }
+    .mem-level:hover { transform: translateX(4px); border-color: rgba(0,243,255,.2); }
+    .mem-level .ml-icon { font-size: 1.35rem; flex-shrink: 0; }
+    .mem-level .ml-name {
+      font-size: 1.2rem;
+      font-weight: 600;
+      min-width: 80px;
+    }
+    .mem-level:nth-child(1) .ml-name { color: var(--red); }
+    .mem-level:nth-child(2) .ml-name { color: var(--gold); }
+    .mem-level:nth-child(3) .ml-name { color: var(--cyan); }
+    .mem-level:nth-child(4) .ml-name { color: var(--purple); }
+    .mem-level:nth-child(5) .ml-name { color: var(--green); }
+    .mem-level .ml-path {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .95rem;
+      color: var(--text-dim);
+    }
+    .memory-right .mr-note {
+      font-size: .95rem;
+      color: var(--text-dim);
+      opacity: .6;
+      margin-top: 18px;
+      font-style: italic;
+    }
+
+    /* ===== CHAPTER SECTION DIVIDER ===== */
+    .section-divider {
+      width: 60%;
+      max-width: 800px;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,.1), transparent);
+      margin: 30px auto;
+    }
+
+    /* ===================== SLIDE 11: FOUR COMPONENTS ===================== */
+    .four-comp-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      width: 100%;
+      max-width: 1400px;
+      margin-top: 10px;
+    }
+    .comp-card {
+      background: var(--dark-card);
+      border: 1px solid rgba(255,255,255,.06);
+      border-radius: 16px;
+      padding: 36px 32px;
+      text-align: left;
+      transition: border-color .3s, transform .3s;
+    }
+    .comp-card:hover { transform: translateY(-4px); }
+    .comp-card:nth-child(1) { border-left: 4px solid var(--gold); }
+    .comp-card:nth-child(2) { border-left: 4px solid var(--cyan); }
+    .comp-card:nth-child(3) { border-left: 4px solid var(--magenta); }
+    .comp-card:nth-child(4) { border-left: 4px solid var(--green); }
+    .comp-card .cc-icon { font-size: 1.6rem; margin-bottom: 10px; }
+    .comp-card .cc-name { font-size: 1.35rem; font-weight: 700; margin-bottom: 6px; }
+    .comp-card:nth-child(1) .cc-name { color: var(--gold); }
+    .comp-card:nth-child(2) .cc-name { color: var(--cyan); }
+    .comp-card:nth-child(3) .cc-name { color: var(--magenta); }
+    .comp-card:nth-child(4) .cc-name { color: var(--green); }
+    .comp-card .cc-desc { font-size: 1.1rem; color: var(--text-dim); line-height: 1.6; }
+    .comp-card .cc-role { font-size: 1rem; color: var(--text); margin-top: 6px; }
+    .four-principle {
+      font-size: 1.05rem;
+      color: var(--text-dim);
+      letter-spacing: 2px;
+      margin-top: 20px;
+    }
+
+    /* ===================== SLIDE 12: MNEMONIC ===================== */
+    .mnemonic-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      width: 100%;
+      max-width: 1400px;
+      margin-top: 10px;
+    }
+    .mnemonic-card {
+      background: var(--dark-card);
+      border: 1px solid rgba(255,255,255,.06);
+      border-radius: 16px;
+      padding: 36px 32px;
+      text-align: left;
+      transition: border-color .3s, transform .3s;
+      position: relative;
+    }
+    .mnemonic-card:hover { transform: translateY(-4px); }
+    .mnemonic-card .mc-num {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 2.5rem;
+      font-weight: 700;
+      position: absolute;
+      top: 20px;
+      right: 28px;
+      opacity: .12;
+    }
+    .mnemonic-card:nth-child(1) { border-top: 3px solid var(--gold); }
+    .mnemonic-card:nth-child(1) .mc-num { color: var(--gold); }
+    .mnemonic-card:nth-child(2) { border-top: 3px solid var(--cyan); }
+    .mnemonic-card:nth-child(2) .mc-num { color: var(--cyan); }
+    .mnemonic-card:nth-child(3) { border-top: 3px solid var(--magenta); }
+    .mnemonic-card:nth-child(3) .mc-num { color: var(--magenta); }
+    .mnemonic-card:nth-child(4) { border-top: 3px solid var(--green); }
+    .mnemonic-card:nth-child(4) .mc-num { color: var(--green); }
+    .mnemonic-card .mc-quote {
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin-bottom: 10px;
+      font-style: italic;
+    }
+    .mnemonic-card:nth-child(1) .mc-quote { color: var(--gold); }
+    .mnemonic-card:nth-child(2) .mc-quote { color: var(--cyan); }
+    .mnemonic-card:nth-child(3) .mc-quote { color: var(--magenta); }
+    .mnemonic-card:nth-child(4) .mc-quote { color: var(--green); }
+    .mnemonic-card .mc-explain { font-size: 1.1rem; color: var(--text-dim); }
+
+    /* ===================== SLIDE 13: DUAL PILLARS ===================== */
+    .pillars-layout {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 40px;
+      width: 100%;
+      max-width: 1500px;
+      align-items: start;
+      text-align: left;
+    }
+    .pillar-card {
+      background: var(--dark-card);
+      border: 1px solid rgba(255,255,255,.06);
+      border-radius: 18px;
+      padding: 40px 36px;
+    }
+    .pillar-card.pc-headless { border-top: 3px solid var(--gold); }
+    .pillar-card.pc-mcp { border-top: 3px solid var(--purple); }
+    .pillar-card .pil-icon { font-size: 2rem; margin-bottom: 12px; }
+    .pillar-card .pil-name { font-size: 1.6rem; font-weight: 700; margin-bottom: 6px; }
+    .pillar-card.pc-headless .pil-name { color: var(--gold); }
+    .pillar-card.pc-mcp .pil-name { color: var(--purple); }
+    .pillar-card .pil-sub { font-size: 1.1rem; color: var(--text-dim); margin-bottom: 20px; }
+    .pillar-card .pil-list { display: flex; flex-direction: column; gap: 12px; }
+    .pillar-card .pil-item { font-size: 1.1rem; color: var(--text); display: flex; align-items: center; gap: 10px; }
+    .pillar-card .pil-item .pi-gt { color: var(--text-dim); flex-shrink: 0; }
+    .pillars-plus {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding-top: 80px;
+      font-size: 3rem;
+      color: var(--cyan);
+      text-shadow: 0 0 16px var(--cyan-glow);
+      animation: pulse 2s infinite;
+    }
+    .pillars-note {
+      text-align: center;
+      font-size: 1.1rem;
+      color: var(--text-dim);
+      letter-spacing: 2px;
+      margin-top: 20px;
+    }
+
+    /* ===================== SLIDE 14: WATERSHED ===================== */
+    .watershed-layout {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 30px;
+      width: 100%;
+      max-width: 1500px;
+      align-items: start;
+      text-align: left;
+    }
+    .ws-side {
+      background: var(--dark-card);
+      border: 1px solid rgba(255,255,255,.06);
+      border-radius: 18px;
+      padding: 40px 36px;
+    }
+    .ws-side.ws-user { border-color: rgba(255,255,255,.08); }
+    .ws-side.ws-builder { border-color: rgba(255,0,200,.2); box-shadow: 0 0 24px rgba(255,0,200,.06); }
+    .ws-side .ws-icon { font-size: 2rem; margin-bottom: 12px; }
+    .ws-side .ws-role { font-size: 1.5rem; font-weight: 700; margin-bottom: 8px; }
+    .ws-side.ws-user .ws-role { color: var(--text-dim); }
+    .ws-side.ws-builder .ws-role { color: var(--magenta); }
+    .ws-side .ws-sub { font-size: 1.05rem; color: var(--text-dim); margin-bottom: 20px; }
+    .ws-side .ws-items { display: flex; flex-wrap: wrap; gap: 10px; }
+    .ws-side .ws-item {
+      font-size: 1rem;
+      background: rgba(255,255,255,.04);
+      border-radius: 8px;
+      padding: 8px 16px;
+      color: var(--text-dim);
+    }
+    .ws-side.ws-builder .ws-code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .9rem;
+      background: rgba(0,0,0,.4);
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 10px;
+      padding: 20px 24px;
+      margin-top: 16px;
+      line-height: 1.7;
+      color: var(--cyan);
+    }
+    .ws-divider {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding-top: 60px;
+    }
+    .ws-divider .wsd-label {
+      writing-mode: vertical-rl;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .85rem;
+      letter-spacing: 4px;
+      color: var(--gold);
+    }
+    .ws-divider .wsd-arrow { font-size: 2rem; color: var(--gold); animation: arrowPulse 2s infinite; }
+
+    /* ===================== SLIDE 15: HARNESS CONCEPT ===================== */
+    .harness-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 50px;
+      width: 100%;
+      max-width: 1500px;
+      text-align: left;
+      align-items: center;
+    }
+    .harness-left .hl-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 2.8rem;
+      font-weight: 700;
+      color: var(--gold);
+      margin-bottom: 16px;
+    }
+    .harness-left .hl-def { font-size: 1.25rem; color: var(--text-dim); line-height: 1.7; margin-bottom: 24px; }
+    .harness-left .hl-quote {
+      background: rgba(255,215,0,.06);
+      border-left: 3px solid var(--gold);
+      border-radius: 0 12px 12px 0;
+      padding: 24px 28px;
+      font-size: 1.2rem;
+      line-height: 1.7;
+      color: var(--gold);
+      font-style: italic;
+    }
+    .harness-right {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+    .harness-card {
+      background: var(--dark-card);
+      border: 1px solid rgba(255,255,255,.06);
+      border-radius: 14px;
+      padding: 28px 24px;
+      transition: border-color .3s, transform .3s;
+    }
+    .harness-card:hover { transform: translateY(-4px); }
+    .harness-card:nth-child(1) { border-top: 3px solid var(--cyan); }
+    .harness-card:nth-child(2) { border-top: 3px solid var(--gold); }
+    .harness-card:nth-child(3) { border-top: 3px solid var(--green); }
+    .harness-card:nth-child(4) { border-top: 3px solid var(--purple); }
+    .harness-card .hc-icon { font-size: 1.5rem; margin-bottom: 10px; }
+    .harness-card .hc-name { font-size: 1.2rem; font-weight: 700; margin-bottom: 8px; }
+    .harness-card:nth-child(1) .hc-name { color: var(--cyan); }
+    .harness-card:nth-child(2) .hc-name { color: var(--gold); }
+    .harness-card:nth-child(3) .hc-name { color: var(--green); }
+    .harness-card:nth-child(4) .hc-name { color: var(--purple); }
+    .harness-card .hc-desc { font-size: 1rem; color: var(--text-dim); line-height: 1.55; }
+
+    /* ===================== SLIDE 16: FORMULA ===================== */
+    .formula-page .fp-eq {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 4.5rem;
+      font-weight: 700;
+      margin: 10px 0 8px;
+    }
+    .formula-page .fp-eq .fe-agent { color: white; }
+    .formula-page .fp-eq .fe-model { color: var(--cyan); text-shadow: 0 0 16px var(--cyan-glow); }
+    .formula-page .fp-eq .fe-harness { color: var(--magenta); text-shadow: 0 0 16px var(--magenta-glow); }
+    .formula-page .fp-eq .fe-op { color: var(--text-dim); font-weight: 400; }
+    .fp-cards {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 20px;
+      width: 100%;
+      max-width: 1500px;
+      margin-top: 24px;
+    }
+    .fp-card {
+      background: var(--dark-card);
+      border: 1px solid rgba(255,255,255,.06);
+      border-radius: 12px;
+      padding: 24px 16px;
+      text-align: center;
+      transition: border-color .3s, transform .3s;
+    }
+    .fp-card:hover { transform: translateY(-4px); border-color: rgba(0,243,255,.2); }
+    .fp-card .fpc-icon { font-size: 1.4rem; margin-bottom: 8px; }
+    .fp-card .fpc-name { font-size: 1.05rem; font-weight: 600; color: var(--text); }
+    .fp-footnote {
+      font-size: 1.1rem;
+      color: var(--text-dim);
+      margin-top: 24px;
+      letter-spacing: 1px;
+    }
+
+    /* ===================== SLIDE 17: AGENTIC LOOP ===================== */
+    .loop-slide { position: relative; }
+    .loop-ring {
+      position: relative;
+      width: 780px;
+      height: 660px;
+      margin: 0 auto;
+    }
+    .loop-center {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 150px; height: 150px;
+      border-radius: 50%;
+      background: rgba(0,243,255,.08);
+      border: 2px solid rgba(0,243,255,.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: var(--cyan);
+      z-index: 2;
+    }
+    .loop-step {
+      position: absolute;
+      width: 170px;
+      background: var(--dark-card);
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 12px;
+      padding: 20px 16px;
+      text-align: center;
+      transition: border-color .3s, transform .3s;
+    }
+    .loop-step:hover { transform: scale(1.05); }
+    .loop-step .ls-num {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .loop-step .ls-title { font-size: 1.15rem; font-weight: 600; margin-bottom: 5px; color: white; }
+    .loop-step .ls-desc { font-size: 1rem; color: var(--text-dim); }
+    /* 5 cards at 72° intervals, symmetric around center (390,330), radius 260px */
+    /* ① top center */
+    .loop-step:nth-child(2) { top: 0; left: 305px; border-top: 3px solid var(--cyan); }
+    .loop-step:nth-child(2) .ls-num { color: var(--cyan); }
+    /* ② top-right */
+    .loop-step:nth-child(3) { top: 116px; left: 562px; border-top: 3px solid var(--gold); }
+    .loop-step:nth-child(3) .ls-num { color: var(--gold); }
+    /* ③ bottom-right */
+    .loop-step:nth-child(4) { top: 438px; left: 490px; border-top: 3px solid var(--magenta); }
+    .loop-step:nth-child(4) .ls-num { color: var(--magenta); }
+    /* ④ bottom-left */
+    .loop-step:nth-child(5) { top: 438px; left: 120px; border-top: 3px solid var(--green); }
+    .loop-step:nth-child(5) .ls-num { color: var(--green); }
+    /* ⑤ top-left */
+    .loop-step:nth-child(6) { top: 116px; left: 48px; border-top: 3px solid var(--purple); }
+    .loop-step:nth-child(6) .ls-num { color: var(--purple); }
+    /* orbit ring */
+    .loop-ring::before {
+      content: "";
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 520px; height: 520px;
+      border-radius: 50%;
+      border: 1px dashed rgba(0,243,255,.2);
+    }
+
+    /* ===================== SLIDE 18: INSIGHT ===================== */
+    .insight-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 50px;
+      width: 100%;
+      max-width: 1500px;
+      text-align: left;
+      align-items: center;
+    }
+    .insight-left .il-big {
+      font-size: 3.4rem;
+      font-weight: 700;
+      line-height: 1.3;
+      margin-bottom: 24px;
+    }
+    .insight-left .il-big .ib-line { display: block; }
+    .insight-left .il-big .ib-harness { color: var(--cyan); }
+    .insight-left .il-big .ib-compare { color: var(--gold); }
+    .insight-left .il-big .ib-important { color: var(--magenta); }
+    .insight-left .il-compare {
+      font-size: 1.2rem;
+      color: var(--text-dim);
+      line-height: 1.7;
+    }
+    .insight-left .il-compare strong { color: var(--gold); }
+    .insight-right {
+      background: var(--dark-card);
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 16px;
+      padding: 36px;
+    }
+    .insight-right .ir-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .85rem;
+      letter-spacing: 2px;
+      color: var(--cyan);
+      margin-bottom: 24px;
+    }
+    .insight-right .ir-bar-wrap { margin-bottom: 20px; }
+    .insight-right .ir-bar-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 1rem;
+      margin-bottom: 8px;
+    }
+    .insight-right .ir-bar-label .ibl-name { color: var(--text); }
+    .insight-right .ir-bar-label .ibl-tag { color: var(--text-dim); }
+    .insight-right .ir-bar {
+      height: 28px;
+      background: rgba(255,255,255,.06);
+      border-radius: 14px;
+      overflow: hidden;
+    }
+    .insight-right .ir-bar .ir-fill {
+      height: 100%;
+      border-radius: 14px;
+      width: 0;
+      transition: width 1.5s ease-out;
+    }
+    .insight-right .ir-bar .ir-fill.baseline { background: linear-gradient(90deg, var(--red), #FF8888); }
+    .insight-right .ir-bar .ir-fill.top5 { background: linear-gradient(90deg, var(--cyan), var(--green)); }
+    .insight-right .ir-boost {
+      font-size: 1.1rem;
+      color: var(--green);
+      margin-top: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .insight-quote {
+      font-size: 1.05rem;
+      color: var(--text-dim);
+      letter-spacing: 2px;
+      margin-top: 20px;
+      text-align: center;
+    }
+
+    /* ===================== SLIDE 19: FLOW ===================== */
+    .flow-layout {
+      text-align: left;
+      width: 100%;
+      max-width: 1500px;
+    }
+    .flow-user {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+    .flow-user .fu-bubble {
+      background: rgba(0,243,255,.08);
+      border: 1px solid rgba(0,243,255,.2);
+      border-radius: 16px 16px 16px 4px;
+      padding: 14px 24px;
+      font-size: 1.2rem;
+      color: var(--cyan);
+    }
+    .flow-user .fu-arrow { font-size: 2rem; color: var(--cyan); animation: arrowPulse 2s infinite; }
+    .flow-pipeline {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+    .flow-step {
+      background: var(--dark-card);
+      border: 1px solid rgba(255,255,255,.06);
+      border-radius: 14px;
+      padding: 24px 20px;
+      text-align: center;
+      transition: border-color .3s, transform .3s;
+      position: relative;
+    }
+    .flow-step:hover { transform: translateY(-4px); }
+    .flow-step .fs-icon { font-size: 1.8rem; margin-bottom: 10px; }
+    .flow-step .fs-name { font-size: 1.15rem; font-weight: 700; margin-bottom: 6px; color: var(--text); }
+    .flow-step .fs-desc { font-size: .95rem; color: var(--text-dim); }
+    /* connector arrows between steps */
+    .flow-step::after {
+      content: "→";
+      position: absolute;
+      right: -14px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 1.2rem;
+      color: var(--cyan);
+      opacity: .5;
+    }
+    .flow-step:last-child::after { display: none; }
+    .flow-result {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      font-size: 1.3rem;
+      color: var(--green);
+    }
+
+    /* ===================== SLIDE 20: COMPOSABILITY ===================== */
+    .compos-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 22px;
+      width: 100%;
+      max-width: 1500px;
+      margin-top: 10px;
+    }
+    .compos-card {
+      background: var(--dark-card);
+      border: 1px solid rgba(255,255,255,.06);
+      border-radius: 16px;
+      padding: 32px 24px;
+      text-align: center;
+      transition: border-color .3s, transform .3s;
+    }
+    .compos-card:hover { transform: translateY(-4px); }
+    .compos-card:nth-child(1) { border-top: 3px solid var(--gold); }
+    .compos-card:nth-child(2) { border-top: 3px solid var(--cyan); }
+    .compos-card:nth-child(3) { border-top: 3px solid var(--magenta); }
+    .compos-card:nth-child(4) { border-top: 3px solid var(--green); }
+    .compos-card .cp-icon { font-size: 1.6rem; margin-bottom: 10px; }
+    .compos-card .cp-name { font-size: 1.15rem; font-weight: 700; margin-bottom: 6px; }
+    .compos-card:nth-child(1) .cp-name { color: var(--gold); }
+    .compos-card:nth-child(2) .cp-name { color: var(--cyan); }
+    .compos-card:nth-child(3) .cp-name { color: var(--magenta); }
+    .compos-card:nth-child(4) .cp-name { color: var(--green); }
+    .compos-card .cp-q { font-size: 1.3rem; font-weight: 700; margin-bottom: 8px; color: white; }
+    .compos-card .cp-desc { font-size: 1rem; color: var(--text-dim); }
+    .compos-note {
+      font-size: 1.05rem;
+      color: var(--text-dim);
+      letter-spacing: 2px;
+      margin-top: 20px;
+    }
+
+    /* ===================== SLIDE 21: PLUGINS ===================== */
+    .plugins-layout {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 40px;
+      width: 100%;
+      max-width: 1500px;
+      align-items: center;
+      text-align: left;
+    }
+    .plg-pain .pp-title {
+      font-size: 2.8rem;
+      font-weight: 700;
+      line-height: 1.3;
+      margin-bottom: 24px;
+    }
+    .plg-pain .pp-scatter {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .plg-pain .pp-item {
+      background: rgba(255,255,255,.04);
+      border: 1px dashed rgba(255,255,255,.1);
+      border-radius: 10px;
+      padding: 14px 18px;
+      font-size: 1rem;
+      color: var(--text-dim);
+      text-align: center;
+    }
+    .plg-arrow {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+    .plg-arrow .pa-txt { font-size: 1rem; color: var(--gold); letter-spacing: 2px; }
+    .plg-arrow .pa-arr { font-size: 3rem; color: var(--gold); animation: arrowPulse 2s infinite; }
+    .plg-solution {
+      background: var(--dark-card);
+      border: 1px solid rgba(0,243,255,.15);
+      border-radius: 18px;
+      padding: 36px;
+    }
+    .plg-solution .ps-head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+    .plg-solution .ps-icon { font-size: 2rem; }
+    .plg-solution .ps-title { font-size: 1.5rem; font-weight: 700; color: var(--cyan); }
+    .plg-solution .ps-sub { font-size: 1.1rem; color: var(--text-dim); margin-bottom: 20px; }
+    .plg-solution .ps-code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .85rem;
+      background: rgba(0,0,0,.4);
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 10px;
+      padding: 18px 22px;
+      line-height: 1.7;
+      color: var(--cyan);
+      margin-bottom: 18px;
+    }
+    .plg-solution .ps-cta { font-size: 1.1rem; color: var(--green); }
+
+    /* ===================== SLIDE 22: SKILLS VS PLUGINS ===================== */
+    .svsp-layout {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 40px;
+      width: 100%;
+      max-width: 1500px;
+      align-items: start;
+      text-align: left;
+    }
+    .svsp-side {
+      background: var(--dark-card);
+      border: 1px solid rgba(255,255,255,.06);
+      border-radius: 18px;
+      padding: 40px 36px;
+    }
+    .svsp-side.svsp-skills { border-top: 3px solid var(--cyan); }
+    .svsp-side.svsp-plugins { border-top: 3px solid var(--green); }
+    .svsp-side .ss-icon { font-size: 1.8rem; margin-bottom: 10px; }
+    .svsp-side .ss-name { font-size: 1.6rem; font-weight: 700; margin-bottom: 6px; }
+    .svsp-side.svsp-skills .ss-name { color: var(--cyan); }
+    .svsp-side.svsp-plugins .ss-name { color: var(--green); }
+    .svsp-side .ss-type { font-size: .9rem; color: var(--text-dim); margin-bottom: 14px; }
+    .svsp-side .ss-def { font-size: 1.15rem; color: var(--text); margin-bottom: 18px; font-style: italic; }
+    .svsp-side .ss-list { display: flex; flex-direction: column; gap: 10px; }
+    .svsp-side .ss-item { font-size: 1.05rem; color: var(--text-dim); display: flex; align-items: center; gap: 10px; }
+    .svsp-vs {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding-top: 100px;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 2.5rem;
+      font-weight: 700;
+      color: var(--gold);
+      text-shadow: 0 0 16px var(--gold-glow);
+    }
+    .svsp-note {
+      text-align: center;
+      font-size: 1.05rem;
+      color: var(--text-dim);
+      margin-top: 20px;
+    }
+
+    /* ===================== SLIDE 23: DECISION TREE ===================== */
+    .tree-layout {
+      width: 100%;
+      max-width: 1500px;
+      text-align: left;
+    }
+    .tree-root {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    .tree-root .tr-node {
+      display: inline-block;
+      background: rgba(0,243,255,.08);
+      border: 2px solid rgba(0,243,255,.3);
+      border-radius: 14px;
+      padding: 16px 32px;
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--cyan);
+    }
+    .tree-root .tr-sub { font-size: .9rem; color: var(--text-dim); margin-top: 6px; }
+    .tree-branches {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+    }
+    .tree-branch {
+      background: var(--dark-card);
+      border: 1px solid rgba(255,255,255,.06);
+      border-radius: 14px;
+      padding: 28px 24px;
+    }
+    .tree-branch:nth-child(1) { border-top: 3px solid var(--cyan); }
+    .tree-branch:nth-child(2) { border-top: 3px solid var(--gold); }
+    .tree-branch:nth-child(3) { border-top: 3px solid var(--magenta); }
+    .tree-branch .tb-name { font-size: 1.2rem; font-weight: 700; margin-bottom: 4px; }
+    .tree-branch:nth-child(1) .tb-name { color: var(--cyan); }
+    .tree-branch:nth-child(2) .tb-name { color: var(--gold); }
+    .tree-branch:nth-child(3) .tb-name { color: var(--magenta); }
+    .tree-branch .tb-en { font-size: .85rem; color: var(--text-dim); margin-bottom: 16px; }
+    .tree-branch .tb-options { display: flex; flex-direction: column; gap: 10px; }
+    .tree-branch .tb-opt {
+      font-size: 1rem;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .tree-branch .tb-opt .to-arrow { color: var(--text-dim); }
+    .tree-branch .tb-opt .to-comp { color: var(--gold); font-weight: 600; }
+
+    /* ===================== SLIDE 24: SIX SCENARIOS ===================== */
+    .scenarios-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      width: 100%;
+      max-width: 1500px;
+      margin-top: 10px;
+    }
+    .scen-card {
+      background: var(--dark-card);
+      border: 1px solid rgba(255,255,255,.06);
+      border-radius: 14px;
+      padding: 28px 24px;
+      text-align: left;
+      transition: border-color .3s, transform .3s;
+    }
+    .scen-card:hover { transform: translateY(-4px); }
+    .scen-card .sc-num {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin-bottom: 10px;
+      opacity: .3;
+    }
+    .scen-card:nth-child(1) .sc-num { color: var(--cyan); }
+    .scen-card:nth-child(2) .sc-num { color: var(--gold); }
+    .scen-card:nth-child(3) .sc-num { color: var(--magenta); }
+    .scen-card:nth-child(4) .sc-num { color: var(--green); }
+    .scen-card:nth-child(5) .sc-num { color: var(--purple); }
+    .scen-card:nth-child(6) .sc-num { color: var(--cyan); }
+    .scen-card .sc-desc { font-size: 1.1rem; font-weight: 600; margin-bottom: 6px; color: white; }
+    .scen-card .sc-goal { font-size: .95rem; color: var(--text-dim); margin-bottom: 12px; }
+    .scen-card .sc-tag {
+      display: inline-block;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .8rem;
+      padding: 4px 12px;
+      border-radius: 6px;
+      font-weight: 500;
+    }
+    .scen-card:nth-child(1) .sc-tag { background: rgba(0,243,255,.12); color: var(--cyan); }
+    .scen-card:nth-child(2) .sc-tag { background: rgba(255,215,0,.12); color: var(--gold); }
+    .scen-card:nth-child(3) .sc-tag { background: rgba(255,0,200,.12); color: var(--magenta); }
+    .scen-card:nth-child(4) .sc-tag { background: rgba(0,200,120,.12); color: var(--green); }
+    .scen-card:nth-child(5) .sc-tag { background: rgba(180,130,255,.12); color: var(--purple); }
+    .scen-card:nth-child(6) .sc-tag { background: rgba(0,243,255,.12); color: var(--cyan); }
+    .scen-verdict {
+      text-align: center;
+      font-size: 1.15rem;
+      color: var(--gold);
+      margin-top: 20px;
+      letter-spacing: 2px;
+    }
+
+    /* ===================== SLIDE 25: CHAPTER SUMMARY ===================== */
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 24px;
+      width: 100%;
+      max-width: 1500px;
+      margin-top: 10px;
+    }
+    .sum-card {
+      background: var(--dark-card);
+      border: 1px solid rgba(255,255,255,.06);
+      border-radius: 16px;
+      padding: 36px 24px;
+      text-align: center;
+      transition: border-color .3s, transform .3s;
+    }
+    .sum-card:hover { transform: translateY(-4px); }
+    .sum-card:nth-child(1) { border-top: 3px solid var(--cyan); }
+    .sum-card:nth-child(2) { border-top: 3px solid var(--gold); }
+    .sum-card:nth-child(3) { border-top: 3px solid var(--magenta); }
+    .sum-card:nth-child(4) { border-top: 3px solid var(--green); }
+    .sum-card .sm-num {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 2.5rem;
+      font-weight: 700;
+      margin-bottom: 14px;
+      opacity: .15;
+    }
+    .sum-card:nth-child(1) .sm-num { color: var(--cyan); opacity: .35; }
+    .sum-card:nth-child(2) .sm-num { color: var(--gold); opacity: .35; }
+    .sum-card:nth-child(3) .sm-num { color: var(--magenta); opacity: .35; }
+    .sum-card:nth-child(4) .sm-num { color: var(--green); opacity: .35; }
+    .sum-card .sm-name { font-size: 1.3rem; font-weight: 700; margin-bottom: 12px; color: white; }
+    .sum-card .sm-line { font-size: 1rem; color: var(--text-dim); line-height: 1.6; }
+
+    /* ===================== SLIDE 26: NEXT CHAPTER ===================== */
+    .next-ch-layout {
+      text-align: center;
+      max-width: 900px;
+    }
+    .next-ch-card {
+      background: var(--dark-card);
+      border: 1px solid rgba(255,215,0,.15);
+      border-radius: 20px;
+      padding: 48px 48px;
+      display: inline-block;
+      text-align: center;
+    }
+    .next-ch-card .ncc-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .85rem;
+      letter-spacing: 3px;
+      color: var(--text-dim);
+      margin-bottom: 18px;
+    }
+    .next-ch-card .ncc-icon { font-size: 2.5rem; margin-bottom: 14px; }
+    .next-ch-card .ncc-title { font-size: 1.6rem; font-weight: 700; color: var(--gold); margin-bottom: 14px; }
+    .next-ch-card .ncc-desc { font-size: 1.15rem; color: var(--text-dim); line-height: 1.6; }
+    .next-ch-arrow {
+      font-size: 3rem;
+      color: var(--cyan);
+      margin-top: 28px;
+      animation: arrowPulse 2s infinite;
+    }
+
+    /* ===================== SLIDE 27: EMPTY PLACEHOLDER ===================== */
+    .empty-slide {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      color: var(--text-dim);
+      opacity: .3;
+    }
+
+    /* ===== DYNAMIC EFFECT: typewriter ===== */
+    .typewriter {
+      overflow: hidden;
+      white-space: nowrap;
+      border-right: 2px solid var(--cyan);
+      animation: typing 2s steps(30) forwards, blink .6s step-end infinite;
+      width: 0;
+    }
+    .typewriter.tw-active { width: 100%; }
+    @keyframes typing { from { width: 0; } to { width: 100%; } }
+    @keyframes blink { 50% { border-color: transparent; } }
+
+    /* ===== DYNAMIC EFFECT: counter ===== */
+    .counter-num {
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 700;
+    }
+
+    /* ===== DYNAMIC EFFECT: stagger reveal ===== */
+    .stagger-item {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    .stagger-item.revealed {
+      animation: fadeInUp .5s ease-out forwards;
+    }
+  </style>
+</head>
+<body>
+  <!-- SNOWFLAKES -->
+  <div id="snowfield"></div>
+
+  <!-- DECK -->
+  <div class="deck" id="deck">
+
+    <!-- ============ SLIDE 1: CHAPTER COVER ============ -->
+    <div class="slide active" data-idx="1">
+      <div class="tag anim-up">CHAPTER · 01</div>
+      <h1 class="ch-cover-title">
+        <span class="ct1">Claude</span>
+        <span class="ct2">Code</span>
+        <span class="ct3">Harness</span>
+      </h1>
+      <div class="ch-cover-sub anim-in d1">核心要点解析指南</div>
+      <div class="ch-cover-divider"></div>
+      <div class="ch-cover-ch anim-in d2">第 1 章：Claude Code 技术架构全景</div>
+      <div class="ch-cover-en anim-in d3">A Deep Dive into the Architecture</div>
+    </div>
+
+    <!-- ============ SLIDE 2: PROBLEM ============ -->
+    <div class="slide" data-idx="2">
+      <div class="tag anim-up">PROBLEM · 问题</div>
+      <div class="problem-layout">
+        <div class="problem-left anim-left d1">
+          <div class="pl-title">一位开发者的困境</div>
+          <div class="pl-role">萌新 · AI Agent 项目负责人</div>
+          <div class="problem-quote">
+            "感觉就像在带一个<em>每天都会失忆的实习生</em>，<br>
+            能力确实不错，但什么背景信息都记不住。"
+          </div>
+        </div>
+        <div class="problem-right">
+          <div class="problem-card pc-red anim-right d2">
+            <div class="pc-head"><span class="pc-dot"></span><span class="pc-name">❗ 记忆丢失</span></div>
+            <div class="pc-desc">每次新会话都要重复技术栈背景，<br>FastAPI + SQLAlchemy 重申了几十次</div>
+          </div>
+          <div class="problem-card pc-gold anim-right d3">
+            <div class="pc-head"><span class="pc-dot"></span><span class="pc-name">🔀 风格飘忽</span></div>
+            <div class="pc-desc">Black 格式标准时有时无，PR 审查被回退 3 次</div>
+          </div>
+          <div class="problem-card pc-cyan anim-right d4">
+            <div class="pc-head"><span class="pc-dot"></span><span class="pc-name">💬 上下文溢出</span></div>
+            <div class="pc-desc">6 个文件的重构任务，到第 4 个文件时遗忘了前序逻辑</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 3: THREE QUESTIONS ============ -->
+    <div class="slide" data-idx="3">
+      <div class="tag anim-up">SPEECHLESS · 哑口无言</div>
+      <h2 class="slide-title anim-up d1">
+        三连问 · <span class="cyan">无言以对</span>
+      </h2>
+      <div class="divider anim-in d2"></div>
+      <div class="questions-layout">
+        <div class="questions-left anim-left d2">
+          <div class="ql-quote">
+            "能力不错……<br>但什么背景信息都记不住。"
+          </div>
+        </div>
+        <div class="questions-right anim-right d3">
+          <div class="qr-label">大佬连问</div>
+          <div class="qr-list">
+            <div class="q-item">
+              <span class="q-num">1</span>
+              <span class="q-text">你配置 <strong>CLAUDE.md</strong> 了吗？</span>
+            </div>
+            <div class="q-item">
+              <span class="q-num">2</span>
+              <span class="q-text">为何不用 <strong>子智能体</strong> 来拆解任务？</span>
+            </div>
+            <div class="q-item">
+              <span class="q-num">3</span>
+              <span class="q-text">为何不配置 <strong>Hooks</strong> 来自动守卫？</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 4: TRUTH REVEAL ============ -->
+    <div class="slide" data-idx="4">
+      <div class="tag anim-up">TRUTH · 真相揭示</div>
+      <div class="truth-layout">
+        <div class="truth-left anim-left d1">
+          <div style="font-size:1.8rem; color:var(--text-dim); margin-bottom:14px;">仅挖掘了</div>
+          <div class="truth-big">10%</div>
+          <div class="truth-big-sub">的能力</div>
+          <svg class="truth-ring" viewBox="0 0 100 100">
+            <circle class="bg" cx="50" cy="50" r="45"/>
+            <circle class="fg" cx="50" cy="50" r="45"/>
+          </svg>
+          <div style="font-size:1.2rem; color:var(--text-dim);">已使用</div>
+        </div>
+        <div class="truth-right anim-right d2">
+          <div class="tr-label">完备的 AGENT 框架</div>
+          <div class="tr-sub">Claude Code 已内置 ——</div>
+          <div class="truth-grid">
+            <div class="truth-item">
+              <div class="ti-icon">📄</div>
+              <div class="ti-name">CLAUDE.md</div>
+              <div class="ti-desc">记忆系统</div>
+            </div>
+            <div class="truth-item">
+              <div class="ti-icon">⭐</div>
+              <div class="ti-name">Skills</div>
+              <div class="ti-desc">领域技能</div>
+            </div>
+            <div class="truth-item">
+              <div class="ti-icon">👥</div>
+              <div class="ti-name">子智能体</div>
+              <div class="ti-desc">任务拆解</div>
+            </div>
+            <div class="truth-item">
+              <div class="ti-icon">⚙️</div>
+              <div class="ti-name">Hooks</div>
+              <div class="ti-desc">自动守卫</div>
+            </div>
+            <div class="truth-item" style="grid-column: span 2;">
+              <div class="ti-icon">🔗</div>
+              <div class="ti-name">MCP — 连接外部世界</div>
+              <div class="ti-desc">打通数据与服务管道</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 5: ICEBERG ============ -->
+    <div class="slide" data-idx="5">
+      <div class="tag anim-up">ICEBERG · 冰山隐喻</div>
+      <div class="iceberg-slide">
+        <div class="iceberg-layout">
+          <div class="iceberg-left anim-left d1">
+            <div class="il-title">🧊 冰山之喻</div>
+            <div class="il-desc">
+              Claude Code 像一座冰山——水面之上仅是一角。
+            </div>
+          </div>
+          <div class="iceberg-visual anim-scale d2">
+            <svg class="iceberg-svg" viewBox="0 0 220 500">
+              <!-- waterline at 36% (y=180) -->
+              <line class="waterline" x1="0" y1="180" x2="220" y2="180"/>
+              <!-- above water: small triangle -->
+              <polygon class="iceberg-above" points="110,18 175,180 45,180"/>
+              <!-- below water: large trapezoid -->
+              <polygon class="iceberg-below" points="175,180 195,480 25,480 45,180"/>
+              <!-- labels -->
+              <text class="iceberg-label-above" x="110" y="105" text-anchor="middle">WATERLINE</text>
+              <text class="iceberg-pct above" x="110" y="140" text-anchor="middle">~10%</text>
+              <text class="iceberg-pct below" x="110" y="320" text-anchor="middle">~90%</text>
+              <text class="iceberg-label-below" x="110" y="360" text-anchor="middle">DEEP CAPABILITY</text>
+            </svg>
+          </div>
+          <div class="iceberg-right anim-right d3">
+            <div class="iceberg-section above">
+              <div class="is-label">🌊 水面上 · 露出的一角</div>
+              <div class="is-list">
+                <div class="iceberg-row">
+                  <span class="ir-name">💬 对话交互</span>
+                  <span class="ir-desc">自然语言问答</span>
+                </div>
+                <div class="iceberg-row">
+                  <span class="ir-name">✏️ 代码生成</span>
+                  <span class="ir-desc">即时编写代码</span>
+                </div>
+                <div class="iceberg-row">
+                  <span class="ir-name">⚡ 命令执行</span>
+                  <span class="ir-desc">Shell 命令调用</span>
+                </div>
+              </div>
+            </div>
+            <div class="iceberg-section below">
+              <div class="is-label">🔱 水面下 · 真正的纵深</div>
+              <div class="is-list">
+                <div class="iceberg-row">
+                  <span class="ir-name">🧠 记忆系统</span>
+                  <span class="ir-desc">CLAUDE.md 持久化上下文</span>
+                </div>
+                <div class="iceberg-row">
+                  <span class="ir-name">🧩 四大组件</span>
+                  <span class="ir-desc">Commands / Skills / Hooks / MCP</span>
+                </div>
+                <div class="iceberg-row">
+                  <span class="ir-name">🔗 集成机制</span>
+                  <span class="ir-desc">CI/CD · Git · IDE 深度联动</span>
+                </div>
+                <div class="iceberg-row">
+                  <span class="ir-name">👩‍💻 Agent SDK</span>
+                  <span class="ir-desc">编程式多智能体编排</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 6: EIGHT KEYS ============ -->
+    <div class="slide" data-idx="6">
+      <div class="tag anim-up">BELOW SURFACE · 水面下（八大核心能力）</div>
+      <h2 class="slide-title anim-up d1">
+        每一项，都是一把<span class="gold">钥匙</span>
+      </h2>
+      <div class="divider anim-in d2"></div>
+      <div class="keys-grid">
+        <div class="key-card anim-scale d2">
+          <div class="kc-icon">📄</div>
+          <div class="kc-name">CLAUDE.md</div>
+          <div class="kc-val">记忆系统 · 永不遗忘</div>
+        </div>
+        <div class="key-card anim-scale d3">
+          <div class="kc-icon">⭐</div>
+          <div class="kc-name">Skills</div>
+          <div class="kc-val">领域知识 · 自动加载</div>
+        </div>
+        <div class="key-card anim-scale d3">
+          <div class="kc-icon">👥</div>
+          <div class="kc-name">子智能体</div>
+          <div class="kc-val">任务拆解 · 独立空间</div>
+        </div>
+        <div class="key-card anim-scale d4">
+          <div class="kc-icon">⭐</div>
+          <div class="kc-name">Hooks</div>
+          <div class="kc-val">关键节点 · 自动守卫</div>
+        </div>
+        <div class="key-card anim-scale d4">
+          <div class="kc-icon">🔗</div>
+          <div class="kc-name">MCP</div>
+          <div class="kc-val">连接外部 · 打通管道</div>
+        </div>
+        <div class="key-card anim-scale d5">
+          <div class="kc-icon">🖥️</div>
+          <div class="kc-name">Headless</div>
+          <div class="kc-val">无人值守 · 自动运行</div>
+        </div>
+        <div class="key-card anim-scale d5">
+          <div class="kc-icon">&lt;&gt;</div>
+          <div class="kc-name">Agent SDK</div>
+          <div class="kc-val">代码编程 · 升维构建</div>
+        </div>
+        <div class="key-card anim-scale d6">
+          <div class="kc-icon">🧩</div>
+          <div class="kc-name">Plugins</div>
+          <div class="kc-val">打包分发 · 一键部署</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 7: PARADIGM SHIFT ============ -->
+    <div class="slide" data-idx="7">
+      <div class="tag anim-up">PARADIGM · 范式转变</div>
+      <h2 class="slide-title anim-up d1">
+        从手动，到<span class="cyan">框架</span>
+      </h2>
+      <div class="divider anim-in d2"></div>
+      <div class="paradigm-layout">
+        <div class="paradigm-side left anim-left d2">
+          <div class="ps-icon">❌</div>
+          <div class="ps-title">手动模式</div>
+          <div class="ps-list">
+            <div class="ps-item"><span class="pi-mark">❌</span> 每次复述技术栈</div>
+            <div class="ps-item"><span class="pi-mark">❌</span> 手动描述规范</div>
+            <div class="ps-item"><span class="pi-mark">❌</span> 靠记忆检查代码</div>
+          </div>
+          <div class="ps-result">😩 低效 · 易错 · 难以扩展</div>
+        </div>
+        <div class="paradigm-arrow-col anim-scale d3">
+          <div class="pa-arrow">→</div>
+        </div>
+        <div class="paradigm-side right anim-right d2">
+          <div class="ps-icon">✅</div>
+          <div class="ps-title">框架模式</div>
+          <div class="ps-list">
+            <div class="ps-item"><span class="pi-mark">✅</span> 技术栈写进 CLAUDE.md</div>
+            <div class="ps-item"><span class="pi-mark">✅</span> 规范封装为 Skill</div>
+            <div class="ps-item"><span class="pi-mark">✅</span> 检查配置成 Hook</div>
+          </div>
+          <div class="ps-result">🚀 一劳永逸 · 零遗忘 · 永不懈怠</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 8: ENGINEERING THOUGHT ============ -->
+    <div class="slide" data-idx="8">
+      <div class="tag anim-up">ESSENCE · 工程思想</div>
+      <div class="eng-layout">
+        <div class="eng-title anim-up d1">把个体智慧 · 沉淀为制度规范</div>
+        <div class="eng-principle anim-in d2">配置一旦确立 · 永不遗忘 · 永不懈怠</div>
+        <div class="eng-cards">
+          <div class="eng-card anim-scale d3">
+            <div class="ec-icon">🟨</div>
+            <div class="ec-name">不忘</div>
+            <div class="ec-desc">永不遗忘技术栈</div>
+          </div>
+          <div class="eng-card anim-scale d4">
+            <div class="ec-icon">🔵</div>
+            <div class="ec-name">不懈</div>
+            <div class="ec-desc">永不降低标准</div>
+          </div>
+          <div class="eng-card anim-scale d5">
+            <div class="ec-icon">🟢</div>
+            <div class="ec-name">不错</div>
+            <div class="ec-desc">消除人为错误</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 9: FOUR LAYERS ============ -->
+    <div class="slide" data-idx="9">
+      <div class="tag anim-up">ARCHITECTURE · 四层架构</div>
+      <div class="arch-layout">
+        <div class="arch-left anim-left d1">
+          <div class="al-title">摩天大楼之喻</div>
+          <div class="al-desc">
+            从地基到顶楼工作室<br>
+            四层递进，构成完整体系
+          </div>
+        </div>
+        <div class="arch-right">
+          <div class="arch-layer al-1 anim-right d2">
+            <div class="arl-icon">🏢</div>
+            <div class="arl-content">
+              <span class="arl-name">记忆层 · 地基</span>
+              <span class="arl-dot"></span>
+              <span class="arl-desc">CLAUDE.md · 一切之根本</span>
+            </div>
+          </div>
+          <div class="arch-layer al-2 anim-right d3">
+            <div class="arl-icon">🏗️</div>
+            <div class="arl-content">
+              <span class="arl-name">扩展层 · 主体楼层</span>
+              <span class="arl-dot"></span>
+              <span class="arl-desc">Commands · Skills · 子智能体 · Hooks</span>
+            </div>
+          </div>
+          <div class="arch-layer al-3 anim-right d4">
+            <div class="arl-icon">🔌</div>
+            <div class="arl-content">
+              <span class="arl-name">集成层 · 水电管网</span>
+              <span class="arl-dot"></span>
+              <span class="arl-desc">Headless + MCP · 连接外部世界</span>
+            </div>
+          </div>
+          <div class="arch-layer al-4 anim-right d5">
+            <div class="arl-icon">👩‍💻</div>
+            <div class="arl-content">
+              <span class="arl-name">编程层 · 顶楼工作室</span>
+              <span class="arl-dot"></span>
+              <span class="arl-desc">Agent SDK · 让你成为建筑师</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 10: MEMORY LAYER ============ -->
+    <div class="slide" data-idx="10">
+      <div class="tag anim-up">MEMORY · 记忆层</div>
+      <div class="memory-layout">
+        <div class="memory-left anim-left d1">
+          <div class="ml-big">CLAUDE.md</div>
+          <div class="ml-def">一份给 AI 的<br>员工手册</div>
+          <div class="ml-uses">
+            <div class="ml-use"><span class="mu-arrow">📌</span> 自动加载到上下文</div>
+            <div class="ml-use"><span class="mu-arrow">🧠</span> 让 Claude 不再无状态</div>
+            <div class="ml-use"><span class="mu-arrow">📂</span> 理解项目背景</div>
+          </div>
+        </div>
+        <div class="memory-right anim-right d2">
+          <div class="mr-label">五级层叠 · 越具体越优先</div>
+          <div class="mr-stack">
+            <div class="mem-level">
+              <span class="ml-icon">📍</span>
+              <span class="ml-name">本地区</span>
+              <span class="ml-path">.claude/CLAUDE.local.md</span>
+            </div>
+            <div class="mem-level">
+              <span class="ml-icon">📜</span>
+              <span class="ml-name">规则级</span>
+              <span class="ml-path">.claude/rules/*.md</span>
+            </div>
+            <div class="mem-level">
+              <span class="ml-icon">🎯</span>
+              <span class="ml-name">项目级</span>
+              <span class="ml-path">./CLAUDE.md</span>
+            </div>
+            <div class="mem-level">
+              <span class="ml-icon">👤</span>
+              <span class="ml-name">用户级</span>
+              <span class="ml-path">~/.claude/CLAUDE.md</span>
+            </div>
+            <div class="mem-level">
+              <span class="ml-icon">🏢</span>
+              <span class="ml-name">企业级</span>
+              <span class="ml-path">/etc/claude/CLAUDE.md</span>
+            </div>
+          </div>
+          <div class="mr-note">与 CSS 层叠优先级 · 异曲同工</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 11: FOUR COMPONENTS ============ -->
+    <div class="slide" data-idx="11">
+      <div class="tag anim-up">EXTENSION · 扩展层</div>
+      <h2 class="slide-title anim-up d1">四大组件 · <span class="gold">各司其职</span></h2>
+      <div class="divider anim-in d2"></div>
+      <div class="four-comp-grid">
+        <div class="comp-card anim-scale d2 stagger-item">
+          <div class="cc-icon">⚡</div>
+          <div class="cc-name">Commands</div>
+          <div class="cc-desc">用户手动触发的 斜杠指令</div>
+          <div class="cc-role">🎯 最直观</div>
+        </div>
+        <div class="comp-card anim-scale d3 stagger-item">
+          <div class="cc-icon">⭐</div>
+          <div class="cc-name">Skills</div>
+          <div class="cc-desc">Claude 自动判断，按需加载</div>
+          <div class="cc-role">🧠 智能感知</div>
+        </div>
+        <div class="comp-card anim-scale d4 stagger-item">
+          <div class="cc-icon">👥</div>
+          <div class="cc-name">子智能体</div>
+          <div class="cc-desc">为特定任务 开辟独立空间</div>
+          <div class="cc-role">🔀 解决溢出</div>
+        </div>
+        <div class="comp-card anim-scale d5 stagger-item">
+          <div class="cc-icon">🔄</div>
+          <div class="cc-name">Hooks</div>
+          <div class="cc-desc">工具调用前后的 守卫</div>
+          <div class="cc-role">🛡️ 检查拦截</div>
+        </div>
+      </div>
+      <div class="four-principle anim-in d7">— 各有用途 · 互不重复 · 正交性强 —</div>
+    </div>
+
+    <!-- ============ SLIDE 12: MNEMONIC ============ -->
+    <div class="slide" data-idx="12">
+      <div class="tag anim-up">MNEMONIC · 触发口诀</div>
+      <h2 class="slide-title anim-up d1">四句话，<span class="cyan">记一辈子</span></h2>
+      <div class="divider anim-in d2"></div>
+      <div class="mnemonic-grid">
+        <div class="mnemonic-card anim-scale d2 stagger-item">
+          <div class="mc-num">①</div>
+          <div class="mc-quote">"你叫它做"</div>
+          <div class="cc-name" style="color:var(--gold);margin-bottom:6px;">⚡ Commands</div>
+          <div class="mc-explain">🎯 由用户指令驱动</div>
+        </div>
+        <div class="mnemonic-card anim-scale d3 stagger-item">
+          <div class="mc-num">②</div>
+          <div class="mc-quote">"它自己知道该做"</div>
+          <div class="cc-name" style="color:var(--cyan);margin-bottom:6px;">⭐ Skills</div>
+          <div class="mc-explain">🧠 Claude 自主判断</div>
+        </div>
+        <div class="mnemonic-card anim-scale d4 stagger-item">
+          <div class="mc-num">③</div>
+          <div class="mc-quote">"它安排别人做"</div>
+          <div class="cc-name" style="color:var(--magenta);margin-bottom:6px;">👥 子智能体</div>
+          <div class="mc-explain">🔀 委派给专项 Agent</div>
+        </div>
+        <div class="mnemonic-card anim-scale d5 stagger-item">
+          <div class="mc-num">④</div>
+          <div class="mc-quote">"到这一步 · 必检查"</div>
+          <div class="cc-name" style="color:var(--green);margin-bottom:6px;">🔄 Hooks</div>
+          <div class="mc-explain">🛡️ 关键节点 自动触发</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 13: DUAL PILLARS ============ -->
+    <div class="slide" data-idx="13">
+      <div class="tag anim-up">INTEGRATION · 集成层</div>
+      <h2 class="slide-title anim-up d1"><span class="gold">两大支柱</span></h2>
+      <div class="divider anim-in d2"></div>
+      <div class="pillars-layout">
+        <div class="pillar-card pc-headless anim-left d2">
+          <div class="pil-icon">🖥️</div>
+          <div class="pil-name">Headless 模式</div>
+          <div class="pil-sub">脱离交互终端</div>
+          <div class="pil-list">
+            <div class="pil-item"><span class="pi-gt">🤖</span> 无人值守 自动运行</div>
+            <div class="pil-item"><span class="pi-gt">⚙️</span> 无缝嵌入 CI / CD 流水线</div>
+            <div class="pil-item"><span class="pi-gt">📋</span> 命令行批量调度</div>
+          </div>
+        </div>
+        <div class="pillars-plus anim-scale d3">+</div>
+        <div class="pillar-card pc-mcp anim-right d2">
+          <div class="pil-icon">🔗</div>
+          <div class="pil-name">MCP</div>
+          <div class="pil-sub">深度连接外部系统</div>
+          <div class="pil-list">
+            <div class="pil-item"><span class="pi-gt">🗄️</span> 访问 数据库</div>
+            <div class="pil-item"><span class="pi-gt">🌐</span> 调用 外部 API</div>
+            <div class="pil-item"><span class="pi-gt">🐙</span> 操作 GitHub Issue</div>
+          </div>
+        </div>
+      </div>
+      <div class="pillars-note anim-in d5">— 一个走出去，一个迎进来 —</div>
+    </div>
+
+    <!-- ============ SLIDE 14: WATERSHED ============ -->
+    <div class="slide" data-idx="14">
+      <div class="tag anim-up">PROGRAMMING · 编程层</div>
+      <h2 class="slide-title anim-up d1">从使用者，升维为<span class="magenta">建筑师</span></h2>
+      <div class="divider anim-in d2"></div>
+      <div class="watershed-layout">
+        <div class="ws-side ws-user anim-left d2">
+          <div class="ws-icon">👤</div>
+          <div class="ws-role">配置使用者</div>
+          <div class="ws-sub">通过配置文件拓展能力</div>
+          <div class="ws-items">
+            <div class="ws-item">📄 CLAUDE.md</div>
+            <div class="ws-item">⭐ Skills</div>
+            <div class="ws-item">🔄 Hooks</div>
+            <div class="ws-item">🔗 MCP</div>
+          </div>
+        </div>
+        <div class="ws-divider anim-scale d3">
+          <div class="wsd-label">分水岭</div>
+          <div class="wsd-arrow">→</div>
+        </div>
+        <div class="ws-side ws-builder anim-right d2">
+          <div class="ws-icon">👩‍💻</div>
+          <div class="ws-role">代码构建者</div>
+          <div class="ws-sub">用 Python 或 TypeScript 直接驱动 Claude Code</div>
+          <div class="ws-code">
+            <span style="color:var(--magenta)">from</span> agent <span style="color:var(--magenta)">import</span> ClaudeAgent<br>
+            agent = ClaudeAgent.spawn(...)
+          </div>
+          <div style="font-size:1rem;color:var(--text-dim);margin-top:12px;">从零构建全新 Agent</div>
+        </div>
+      </div>
+      <div style="text-align:center;margin-top:16px;">
+        <span class="tag anim-in d5" style="font-size:.8rem;">Agent SDK</span>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 15: HARNESS CONCEPT ============ -->
+    <div class="slide" data-idx="15">
+      <div class="tag anim-up">CORE CONCEPT · 核心概念</div>
+      <h2 class="slide-title anim-up d1">Harness · <span class="gold">马具</span></h2>
+      <div class="divider anim-in d2"></div>
+      <div class="harness-layout">
+        <div class="harness-left anim-left d2">
+          <div class="hl-def">包裹在 Claude 模型外层的<br>Agent 编排框架</div>
+          <div class="hl-quote">
+            没有 Harness，<br>
+            Claude 就是一个<br>
+            空有智力却寸步难行的大脑。
+          </div>
+        </div>
+        <div class="harness-right">
+          <div class="harness-card anim-scale d3 stagger-item">
+            <div class="hc-icon">📄</div>
+            <div class="hc-name">读取文件</div>
+            <div class="hc-desc">浏览源码、配置与文档<br>构建上下文理解</div>
+          </div>
+          <div class="harness-card anim-scale d4 stagger-item">
+            <div class="hc-icon">✏️</div>
+            <div class="hc-name">编写代码</div>
+            <div class="hc-desc">创建、修改源文件<br>自动生成实现方案</div>
+          </div>
+          <div class="harness-card anim-scale d5 stagger-item">
+            <div class="hc-icon">⚡</div>
+            <div class="hc-name">执行命令</div>
+            <div class="hc-desc">运行 shell、测试、构建<br>获取实时反馈验证</div>
+          </div>
+          <div class="harness-card anim-scale d6 stagger-item">
+            <div class="hc-icon">🌐</div>
+            <div class="hc-name">外部交互</div>
+            <div class="hc-desc">调用 MCP、API 服务<br>连接外部数据源</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 16: FORMULA PAGE ============ -->
+    <div class="slide formula-page" data-idx="16">
+      <div class="tag anim-up">FORMULA · 公式揭示</div>
+      <div class="fp-eq anim-scale d1">
+        <span class="fe-agent">Agent</span>
+        <span class="fe-op"> = </span>
+        <span class="fe-model">Model</span>
+        <span class="fe-op"> + </span>
+        <span class="fe-harness">Harness</span>
+      </div>
+      <div class="divider anim-in d2"></div>
+      <div class="fp-cards">
+        <div class="fp-card anim-scale d2 stagger-item">
+          <div class="fpc-icon">🔧</div>
+          <div class="fpc-name">工具系统</div>
+        </div>
+        <div class="fp-card anim-scale d3 stagger-item">
+          <div class="fpc-icon">🔒</div>
+          <div class="fpc-name">权限控制</div>
+        </div>
+        <div class="fp-card anim-scale d4 stagger-item">
+          <div class="fpc-icon">💬</div>
+          <div class="fpc-name">上下文管理</div>
+        </div>
+        <div class="fp-card anim-scale d5 stagger-item">
+          <div class="fpc-icon">⬇</div>
+          <div class="fpc-name">会话持久化</div>
+        </div>
+        <div class="fp-card anim-scale d6 stagger-item">
+          <div class="fpc-icon">🔄</div>
+          <div class="fpc-name">Agentic Loop</div>
+        </div>
+      </div>
+      <div class="fp-footnote anim-in d7">Harness · 引擎周围的 全部基础设施</div>
+    </div>
+
+    <!-- ============ SLIDE 17: AGENTIC LOOP ============ -->
+    <div class="slide loop-slide" data-idx="17">
+      <div class="tag anim-up">AGENTIC LOOP · 五步循环</div>
+      <h2 class="slide-title anim-up d1" style="font-size:2.6rem;">观察 · 假设 · 验证 · <span class="cyan">反复</span></h2>
+      <div class="divider anim-in d2"></div>
+      <div class="loop-ring anim-scale d2">
+        <div class="loop-center">LOOP</div>
+        <div class="loop-step anim-scale d3 stagger-item">
+          <div class="ls-num">①</div>
+          <div class="ls-title">📥 接收输入</div>
+          <div class="ls-desc">Prompt · 工具 · 历史</div>
+        </div>
+        <div class="loop-step anim-scale d4 stagger-item">
+          <div class="ls-num">②</div>
+          <div class="ls-title">🧠 模型推理</div>
+          <div class="ls-desc">Claude 分析生成回复</div>
+        </div>
+        <div class="loop-step anim-scale d5 stagger-item">
+          <div class="ls-num">③</div>
+          <div class="ls-title">⚡ 执行工具</div>
+          <div class="ls-desc">Harness 收集结果</div>
+        </div>
+        <div class="loop-step anim-scale d6 stagger-item">
+          <div class="ls-num">④</div>
+          <div class="ls-title">🔄 结果回注</div>
+          <div class="ls-desc">追加到对话历史</div>
+        </div>
+        <div class="loop-step anim-scale d7 stagger-item">
+          <div class="ls-num">⑤</div>
+          <div class="ls-title">🔁 重复 / 结束</div>
+          <div class="ls-desc">完成或达上限</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 18: INSIGHT ============ -->
+    <div class="slide" data-idx="18">
+      <div class="tag anim-up">INSIGHT · 关键洞察</div>
+      <div class="insight-layout">
+        <div class="insight-left anim-left d1">
+          <div class="il-big">
+            <span class="ib-line ib-harness">Harness</span>
+            <span class="ib-line ib-compare">比模型</span>
+            <span class="ib-line ib-important">更重要</span>
+          </div>
+          <div class="il-compare">
+            同一模型 · 不同 Harness 下<br>
+            表现差异 <strong>远大于</strong><br>
+            不同模型 · 同一 Harness 下
+          </div>
+        </div>
+        <div class="insight-right anim-right d2" id="insightPanel">
+          <div class="ir-label">TERMINALBENCH · 实测</div>
+          <div class="ir-bar-wrap">
+            <div class="ir-bar-label">
+              <span class="ibl-name">原 Harness</span>
+              <span class="ibl-tag">基线以下</span>
+            </div>
+            <div class="ir-bar"><div class="ir-fill baseline" data-width="35"></div></div>
+          </div>
+          <div class="ir-bar-wrap">
+            <div class="ir-bar-label">
+              <span class="ibl-name">优化 Harness</span>
+              <span class="ibl-tag">Top 5</span>
+            </div>
+            <div class="ir-bar"><div class="ir-fill top5" data-width="92"></div></div>
+          </div>
+          <div class="ir-boost">🚀 同一模型，仅靠优化 Harness 跃升</div>
+        </div>
+      </div>
+      <div class="insight-quote anim-in d4">— 你学的每一环 · 都是在精雕 Harness —</div>
+    </div>
+
+    <!-- ============ SLIDE 19: FLOW ============ -->
+    <div class="slide" data-idx="19">
+      <div class="tag anim-up">REAL REQUEST · 真实流程</div>
+      <h2 class="slide-title anim-up d1" style="font-size:2.6rem;">"帮我审查代码，确保安全"</h2>
+      <div class="divider anim-in d2"></div>
+      <div class="flow-layout">
+        <div class="flow-user anim-left d2">
+          <div class="fu-bubble">👤 用户：审查这段代码</div>
+          <div class="fu-arrow">→</div>
+        </div>
+        <div class="flow-pipeline">
+          <div class="flow-step anim-up d3 stagger-item">
+            <div class="fs-icon">📄</div>
+            <div class="fs-name">CLAUDE.md</div>
+            <div class="fs-desc">加载项目背景</div>
+          </div>
+          <div class="flow-step anim-up d4 stagger-item">
+            <div class="fs-icon">⭐</div>
+            <div class="fs-name">Skill</div>
+            <div class="fs-desc">安全审查能力</div>
+          </div>
+          <div class="flow-step anim-up d5 stagger-item">
+            <div class="fs-icon">👥</div>
+            <div class="fs-name">子智能体</div>
+            <div class="fs-desc">只读环境扫描</div>
+          </div>
+          <div class="flow-step anim-up d6 stagger-item">
+            <div class="fs-icon">🔄</div>
+            <div class="fs-name">Hook</div>
+            <div class="fs-desc">自动格式化</div>
+          </div>
+        </div>
+        <div class="flow-result anim-in d7">✅ 完整审查报告 · 全程零干预</div>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 20: COMPOSABILITY ============ -->
+    <div class="slide" data-idx="20">
+      <div class="tag anim-up">COMPOSABILITY · 可组合性</div>
+      <h2 class="slide-title anim-up d1">职责清晰 · <span class="cyan">自由组合</span></h2>
+      <div class="divider anim-in d2"></div>
+      <div class="compos-grid">
+        <div class="compos-card anim-scale d2 stagger-item">
+          <div class="cp-icon">📄</div>
+          <div class="cp-name">CLAUDE.md</div>
+          <div class="cp-q">"知道什么"</div>
+          <div class="cp-desc">项目知识沉淀</div>
+        </div>
+        <div class="compos-card anim-scale d3 stagger-item">
+          <div class="cp-icon">⭐</div>
+          <div class="cp-name">Skills</div>
+          <div class="cp-q">"怎么做"</div>
+          <div class="cp-desc">领域方法封装</div>
+        </div>
+        <div class="compos-card anim-scale d4 stagger-item">
+          <div class="cp-icon">👥</div>
+          <div class="cp-name">子智能体</div>
+          <div class="cp-q">"谁来做"</div>
+          <div class="cp-desc">任务专员调度</div>
+        </div>
+        <div class="compos-card anim-scale d5 stagger-item">
+          <div class="cp-icon">🔄</div>
+          <div class="cp-name">Hooks</div>
+          <div class="cp-q">"能否做"</div>
+          <div class="cp-desc">关卡守门约束</div>
+        </div>
+      </div>
+      <div class="compos-note anim-in d6">— 单个组件像积木 · 组合形成 自动化流水线 —</div>
+    </div>
+
+    <!-- ============ SLIDE 21: PLUGINS ============ -->
+    <div class="slide" data-idx="21">
+      <div class="tag anim-up">PLUGINS · 优雅解决</div>
+      <div class="plugins-layout">
+        <div class="plg-pain anim-left d1">
+          <div class="pp-title">手工复制<br>苦不堪言</div>
+          <div class="pp-scatter">
+            <div class="pp-item">⭐ Skill</div>
+            <div class="pp-item">👥 子智能体</div>
+            <div class="pp-item">🔄 Hook</div>
+            <div class="pp-item">⚡ Command</div>
+          </div>
+        </div>
+        <div class="plg-arrow anim-scale d3">
+          <div class="pa-txt">打包</div>
+          <div class="pa-arr">→</div>
+        </div>
+        <div class="plg-solution anim-right d2">
+          <div class="ps-head">
+            <span class="ps-icon">📦</span>
+            <span class="ps-title">Plugins · 容器</span>
+          </div>
+          <div class="ps-sub">所有配置 · 一键打包</div>
+          <div class="ps-code">
+            {<br>
+            &nbsp;&nbsp;"name": "team-best-practices",<br>
+            &nbsp;&nbsp;"skills": ["code-review"],<br>
+            &nbsp;&nbsp;"hooks": ["pre-commit"],<br>
+            &nbsp;&nbsp;"agents": ["security"]<br>
+            }
+          </div>
+          <div class="ps-cta">✅ 新同事一条命令 · 全部就位</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 22: SKILLS VS PLUGINS ============ -->
+    <div class="slide" data-idx="22">
+      <div class="tag anim-up">CLARIFICATION · 常见误区</div>
+      <h2 class="slide-title anim-up d1" style="font-size:3.2rem;">Skills <span class="magenta">≠</span> Plugins</h2>
+      <div class="divider anim-in d2"></div>
+      <div class="svsp-layout">
+        <div class="svsp-side svsp-skills anim-left d2">
+          <div class="ss-icon">⭐</div>
+          <div class="ss-name">Skills</div>
+          <div class="ss-type">能力类型</div>
+          <div class="ss-def">定义"做什么"的能力</div>
+          <div class="ss-list">
+            <div class="ss-item">• 代码审查</div>
+            <div class="ss-item">• 架构分析</div>
+            <div class="ss-item">• 测试生成</div>
+          </div>
+        </div>
+        <div class="svsp-vs anim-scale d3">VS</div>
+        <div class="svsp-side svsp-plugins anim-right d2">
+          <div class="ss-icon">⬢</div>
+          <div class="ss-name">Plugins</div>
+          <div class="ss-type">分发形式</div>
+          <div class="ss-def">定义"如何分享"的容器</div>
+          <div class="ss-list">
+            <div class="ss-item">• 封装 Skills + Hooks</div>
+            <div class="ss-item">• 一键安装部署</div>
+            <div class="ss-item">• 团队最佳实践标准化</div>
+          </div>
+        </div>
+      </div>
+      <div class="svsp-note anim-in d5">个人开发者：用 Skills · 团队负责人：推 Plugins</div>
+    </div>
+
+    <!-- ============ SLIDE 23: DECISION TREE ============ -->
+    <div class="slide" data-idx="23">
+      <div class="tag anim-up">DECISION TREE · 技术选型</div>
+      <h2 class="slide-title anim-up d1" style="font-size:2.6rem;">问自己，<span class="gold">触发方式</span>是什么</h2>
+      <div class="divider anim-in d2"></div>
+      <div class="tree-layout">
+        <div class="tree-root anim-scale d2">
+          <div class="tr-node">触发方式？</div>
+          <div class="tr-sub">Trigger Mode</div>
+        </div>
+        <div class="tree-branches">
+          <div class="tree-branch anim-left d3 stagger-item">
+            <div class="tb-name">👤 人工触发</div>
+            <div class="tb-en">user-driven</div>
+            <div class="tb-options">
+              <div class="tb-opt"><span class="to-arrow">→</span> 步骤固定　　<span class="to-comp">Commands</span></div>
+              <div class="tb-opt"><span class="to-arrow">→</span> 需 AI 判断　<span class="to-comp">Skills</span></div>
+            </div>
+          </div>
+          <div class="tree-branch anim-up d4 stagger-item">
+            <div class="tb-name">⚙️ 自动触发</div>
+            <div class="tb-en">event-driven</div>
+            <div class="tb-options">
+              <div class="tb-opt"><span class="to-arrow">→</span> 事件节点　　<span class="to-comp">Hooks</span></div>
+              <div class="tb-opt"><span class="to-arrow">→</span> CI/CD 流水　<span class="to-comp">Headless</span></div>
+            </div>
+          </div>
+          <div class="tree-branch anim-right d3 stagger-item">
+            <div class="tb-name">🌍 运行环境</div>
+            <div class="tb-en">runtime needs</div>
+            <div class="tb-options">
+              <div class="tb-opt"><span class="to-arrow">→</span> 任务量大　　<span class="to-comp">子智能体</span></div>
+              <div class="tb-opt"><span class="to-arrow">→</span> 外部系统　　<span class="to-comp">MCP</span></div>
+              <div class="tb-opt"><span class="to-arrow">→</span> 代码控制　　<span class="to-comp">SDK</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 24: SIX SCENARIOS ============ -->
+    <div class="slide" data-idx="24">
+      <div class="tag anim-up">SCENARIOS · 六大场景</div>
+      <h2 class="slide-title anim-up d1" style="font-size:2.6rem;">用最简单方案 · <span class="gold">解决当前问题</span></h2>
+      <div class="divider anim-in d2"></div>
+      <div class="scenarios-grid">
+        <div class="scen-card anim-scale d2 stagger-item">
+          <div class="sc-num">①</div>
+          <div class="sc-desc">🚀 每次发布</div>
+          <div class="sc-goal">执行固定检查</div>
+          <div class="sc-tag">→ Commands</div>
+        </div>
+        <div class="scen-card anim-scale d3 stagger-item">
+          <div class="sc-num">②</div>
+          <div class="sc-desc">💬 讨论财务问题</div>
+          <div class="sc-goal">自动指导</div>
+          <div class="sc-tag">→ Skills</div>
+        </div>
+        <div class="scen-card anim-scale d3 stagger-item">
+          <div class="sc-num">③</div>
+          <div class="sc-desc">🔍 审查大型代码</div>
+          <div class="sc-goal">避免溢出</div>
+          <div class="sc-tag">→ 子智能体</div>
+        </div>
+        <div class="scen-card anim-scale d4 stagger-item">
+          <div class="sc-num">④</div>
+          <div class="sc-desc">🛡️ 提交前</div>
+          <div class="sc-goal">自动拦截隐患</div>
+          <div class="sc-tag">→ Hooks</div>
+        </div>
+        <div class="scen-card anim-scale d5 stagger-item">
+          <div class="sc-num">⑤</div>
+          <div class="sc-desc">📋 PR 后</div>
+          <div class="sc-goal">自动审查</div>
+          <div class="sc-tag">→ Headless + Cmd</div>
+        </div>
+        <div class="scen-card anim-scale d5 stagger-item">
+          <div class="sc-num">⑥</div>
+          <div class="sc-desc">🐙 操作 GitHub Issue</div>
+          <div class="sc-goal">外部系统集成</div>
+          <div class="sc-tag">→ MCP</div>
+        </div>
+      </div>
+      <div class="scen-verdict anim-in d7">⚡ 不过度工程化 · 也不工程化不足</div>
+    </div>
+
+    <!-- ============ SLIDE 25: CHAPTER SUMMARY ============ -->
+    <div class="slide" data-idx="25">
+      <div class="tag anim-up">SUMMARY · 本章小结</div>
+      <h2 class="slide-title anim-up d1">从被动使用 · 到<span class="gold">主动编排</span></h2>
+      <div class="divider anim-in d2"></div>
+      <div class="summary-grid">
+        <div class="sum-card anim-scale d2 stagger-item">
+          <div class="sm-num">01</div>
+          <div class="sm-name">🧊 冰山隐喻</div>
+          <div class="sm-line">水面之上 · 一角<br>水面之下 · 纵深</div>
+        </div>
+        <div class="sum-card anim-scale d3 stagger-item">
+          <div class="sm-num">02</div>
+          <div class="sm-name">🏢 四层架构</div>
+          <div class="sm-line">记忆 · 扩展<br>集成 · 编程</div>
+        </div>
+        <div class="sum-card anim-scale d4 stagger-item">
+          <div class="sm-num">03</div>
+          <div class="sm-name">⚙️ Harness 公式</div>
+          <div class="sm-line">Agent =<br>Model + Harness</div>
+        </div>
+        <div class="sum-card anim-scale d5 stagger-item">
+          <div class="sm-num">04</div>
+          <div class="sm-name">🧩 关注点分离</div>
+          <div class="sm-line">职责清晰<br>自由组合</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 26: NEXT CHAPTER ============ -->
+    <div class="slide" data-idx="26">
+      <div class="next-ch-layout">
+        <div class="tag anim-up">NEXT · 下章预告</div>
+        <h2 class="slide-title anim-up d1" style="font-size:3.2rem;">深入<span class="cyan">记忆系统</span></h2>
+        <div class="divider anim-in d2"></div>
+        <div class="next-ch-card anim-scale d3">
+          <div class="ncc-tag">NEXT · CHAPTER 02</div>
+          <div class="ncc-icon">⚡</div>
+          <div class="ncc-title">CLAUDE.md · 记忆系统</div>
+          <div class="ncc-desc">
+            这是实践的最佳起点<br>
+            让 Claude 永远记得你的项目规范与偏好
+          </div>
+        </div>
+        <div class="next-ch-arrow anim-in d5">→</div>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 27: EMPTY PLACEHOLDER ============ -->
+    <div class="slide" data-idx="27">
+      <div class="empty-slide">— 预留页 —</div>
+    </div>
+
+  </div><!-- /deck -->
+
+  <!-- NAV -->
+  <div class="nav" id="nav">
+    <button id="prevBtn" title="上一页">‹</button>
+    <div class="dots" id="dots"></div>
+    <div class="page-info" id="pageInfo">1 / 27</div>
+    <button id="nextBtn" title="下一页">›</button>
+  </div>
+
+  <script>
+    // ===== SNOWFLAKES =====
+    (function() {
+      var f = document.getElementById('snowfield');
+      for (var i = 0; i < 45; i++) {
+        var s = document.createElement('div');
+        s.className = 'snowflake';
+        var sz = 1.5 + Math.random() * 4;
+        var l = Math.random() * 100;
+        var d = 10 + Math.random() * 18;
+        var sw = 3 + Math.random() * 6;
+        var dl = Math.random() * d;
+        var op = .15 + Math.random() * .5;
+        s.style.cssText =
+          'width:'+sz+'px;height:'+sz+'px;left:'+l+'%;opacity:'+op+';'+
+          'animation-duration:'+d+'s,'+sw+'s;animation-delay:'+dl+'s,'+(dl*.4)+'s;';
+        f.appendChild(s);
+      }
+    })();
+
+    // ===== DECK ENGINE =====
+    var slides = Array.from(document.querySelectorAll('.slide'));
+    var TOTAL = 27; // total pages for chapter 1
+    var current = 0;
+    var dotsEl = document.getElementById('dots');
+    var infoEl = document.getElementById('pageInfo');
+
+    slides.forEach(function(_, i) {
+      var d = document.createElement('div');
+      d.className = 'dot' + (i === 0 ? ' active' : '');
+      d.addEventListener('click', function() { goTo(i); });
+      dotsEl.appendChild(d);
+    });
+
+    function goTo(idx) {
+      if (idx < 0 || idx >= slides.length) return;
+      slides[current].classList.remove('active');
+      current = idx;
+      slides[current].classList.add('active');
+      // reset animations
+      slides[current].querySelectorAll('[class*="anim-"]').forEach(function(el) {
+        el.style.animation = 'none';
+        el.offsetHeight;
+        el.style.animation = '';
+      });
+      slides[current].querySelectorAll('.ch-cover-title,.ch-cover-divider').forEach(function(el) {
+        el.style.animation = 'none';
+        el.offsetHeight;
+        el.style.animation = '';
+      });
+      // dynamic effects
+      triggerSlideEffects(current);
+      updateNav();
+      savePos();
+    }
+
+    // ===== DYNAMIC EFFECTS PER SLIDE =====
+    function triggerSlideEffects(idx) {
+      var slide = slides[idx];
+      // stagger reveal
+      var items = slide.querySelectorAll('.stagger-item');
+      items.forEach(function(el) {
+        el.classList.remove('revealed');
+      });
+      items.forEach(function(el, i) {
+        setTimeout(function() { el.classList.add('revealed'); }, 200 + i * 150);
+      });
+      // progress bars (slide 18)
+      if (idx === 17) {
+        var bars = slide.querySelectorAll('.ir-fill');
+        bars.forEach(function(bar) {
+          bar.style.width = '0';
+          setTimeout(function() {
+            bar.style.width = bar.getAttribute('data-width') + '%';
+          }, 500);
+        });
+      }
+      // code typewriter (slide 14)
+      if (idx === 13) {
+        var code = slide.querySelector('.ws-code');
+        if (code) {
+          code.style.opacity = '0';
+          setTimeout(function() { code.style.opacity = '1'; }, 800);
+        }
+      }
+      // loop steps sequential pulse (slide 17)
+      if (idx === 16) {
+        var steps = slide.querySelectorAll('.loop-step');
+        steps.forEach(function(step) {
+          step.style.opacity = '0';
+          step.style.transform = 'scale(0.8)';
+        });
+        steps.forEach(function(step, i) {
+          setTimeout(function() {
+            step.style.transition = 'all .4s ease-out';
+            step.style.opacity = '1';
+            step.style.transform = 'scale(1)';
+          }, 400 + i * 250);
+        });
+      }
+      // flow pipeline cascade (slide 19)
+      if (idx === 18) {
+        var fsteps = slide.querySelectorAll('.flow-step');
+        fsteps.forEach(function(s) {
+          s.style.opacity = '0';
+          s.style.transform = 'translateY(20px)';
+        });
+        fsteps.forEach(function(s, i) {
+          setTimeout(function() {
+            s.style.transition = 'all .4s ease-out';
+            s.style.opacity = '1';
+            s.style.transform = 'translateY(0)';
+          }, 600 + i * 300);
+        });
+      }
+      // tree branches grow (slide 23)
+      if (idx === 22) {
+        var branches = slide.querySelectorAll('.tree-branch');
+        branches.forEach(function(b) {
+          b.style.opacity = '0';
+          b.style.transform = 'translateY(30px)';
+        });
+        branches.forEach(function(b, i) {
+          setTimeout(function() {
+            b.style.transition = 'all .5s ease-out';
+            b.style.opacity = '1';
+            b.style.transform = 'translateY(0)';
+          }, 500 + i * 250);
+        });
+      }
+    }
+
+    function updateNav() {
+      infoEl.textContent = (current + 1) + ' / ' + TOTAL;
+      dotsEl.querySelectorAll('.dot').forEach(function(d, i) {
+        d.classList.toggle('active', i === current);
+      });
+    }
+
+    document.getElementById('prevBtn').addEventListener('click', function() { goTo(current - 1); });
+    document.getElementById('nextBtn').addEventListener('click', function() { goTo(current + 1); });
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') { e.preventDefault(); goTo(current + 1); }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); goTo(current - 1); }
+      if (e.key === 'Home') { e.preventDefault(); goTo(0); }
+      if (e.key === 'End') { e.preventDefault(); goTo(slides.length - 1); }
+    });
+
+    function savePos() { try { localStorage.setItem('ch1-slide', current); } catch(e){} }
+    function loadPos() {
+      try {
+        var s = parseInt(localStorage.getItem('ch1-slide'), 10);
+        if (!isNaN(s) && s >= 0 && s < slides.length) { goTo(s); return true; }
+      } catch(e){}
+      return false;
+    }
+
+    function rescale() {
+      var deck = document.getElementById('deck');
+      var s = Math.min((window.innerWidth - 40) / 1920, (window.innerHeight - 120) / 1080);
+      deck.style.transform = 'scale(' + (s * 1.15) + ')';
+    }
+    window.addEventListener('resize', rescale);
+    rescale();
+    if (!loadPos()) goTo(0);
+  </script>
+</body>
+</html>
