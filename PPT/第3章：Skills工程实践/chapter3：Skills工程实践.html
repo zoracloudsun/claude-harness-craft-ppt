@@ -1,0 +1,1409 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Claude Code Harness · 第 3 章：Skills 工程实践</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    /* ========== DESIGN SYSTEM ========== */
+    :root {
+      --gold: #FFD700;
+      --cyan: #00F3FF;
+      --magenta: #FF00C8;
+      --dark: #0A0A0A;
+      --dark-card: rgba(15, 15, 20, 0.85);
+      --grid: rgba(40, 40, 40, 0.4);
+      --text: #E8E8E8;
+      --text-dim: rgba(255, 255, 255, 0.55);
+      --gold-glow: rgba(255, 215, 0, 0.6);
+      --cyan-glow: rgba(0, 243, 255, 0.6);
+      --magenta-glow: rgba(255, 0, 200, 0.6);
+      --red: #FF4D4D;
+      --green: #00C878;
+      --purple: #B482FF;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: var(--dark);
+      font-family: 'Inter', sans-serif;
+      color: white;
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    /* ========== GRID BACKGROUND ========== */
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+      background-size: 32px 32px;
+      z-index: 0;
+      animation: gridPulse 6s infinite alternate;
+    }
+    @keyframes gridPulse { 0% { opacity: 0.6; } 100% { opacity: 0.85; } }
+    /* ========== SNOWFLAKE PARTICLES ========== */
+    .snowflake {
+      position: fixed; border-radius: 50%; background: white;
+      pointer-events: none; z-index: 1;
+      animation: snowfall linear infinite, snowSway ease-in-out infinite;
+    }
+    @keyframes snowfall { 0% { top: -8px; opacity: 0; } 5% { opacity: 1; } 92% { opacity: 0.8; } 100% { top: 105vh; opacity: 0; } }
+    @keyframes snowSway { 0%, 100% { transform: translateX(0) rotate(0deg); } 25% { transform: translateX(18px) rotate(90deg); } 50% { transform: translateX(-12px) rotate(180deg); } 75% { transform: translateX(22px) rotate(270deg); } }
+    /* ========== DECK CONTAINER ========== */
+    .deck { width: 1920px; height: 1080px; position: relative; transform-origin: center center; z-index: 10; }
+    /* ========== SLIDE BASE ========== */
+    .slide {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 80px 120px 100px;
+      text-align: center;
+      opacity: 0; pointer-events: none; transition: opacity 0.5s ease;
+    }
+    .slide.active { opacity: 1; pointer-events: auto; }
+    .slide:not(.active) { display: none !important; }
+    /* ========== NAV CONTROLS ========== */
+    .nav {
+      position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+      display: flex; align-items: center; gap: 20px; z-index: 100;
+      background: rgba(10,10,10,0.8); border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 40px; padding: 10px 28px; backdrop-filter: blur(10px);
+    }
+    .nav button {
+      background: none; border: 1px solid rgba(255,255,255,0.2); color: white;
+      width: 40px; height: 40px; border-radius: 50%; cursor: pointer; font-size: 1.1rem;
+      display: flex; align-items: center; justify-content: center; transition: all 0.2s;
+    }
+    .nav button:hover { border-color: var(--cyan); color: var(--cyan); box-shadow: 0 0 10px var(--cyan-glow); }
+    .nav .page-info { font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; color: var(--text-dim); min-width: 80px; text-align: center; }
+    .nav .dots { display: flex; gap: 6px; }
+    .nav .dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.2); cursor: pointer; transition: all 0.3s; }
+    .nav .dot.active { background: var(--cyan); box-shadow: 0 0 8px var(--cyan-glow); }
+    /* ========== ANIMATIONS ========== */
+    @keyframes fadeInUp { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes scaleIn { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: scale(1); } }
+    @keyframes slideInLeft { from { opacity: 0; transform: translateX(-40px); } to { opacity: 1; transform: translateX(0); } }
+    @keyframes slideInRight { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: translateX(0); } }
+    .anim-up { animation: fadeInUp 0.6s ease-out both; }
+    .anim-in { animation: fadeIn 0.6s ease-out both; }
+    .anim-scale { animation: scaleIn 0.7s ease-out both; }
+    .anim-left { animation: slideInLeft 0.6s ease-out both; }
+    .anim-right { animation: slideInRight 0.6s ease-out both; }
+    .d1 { animation-delay: 0.1s; } .d2 { animation-delay: 0.25s; } .d3 { animation-delay: 0.4s; } .d4 { animation-delay: 0.55s; }
+    .d5 { animation-delay: 0.7s; } .d6 { animation-delay: 0.85s; } .d7 { animation-delay: 1.0s; } .d8 { animation-delay: 1.15s; }
+    /* ========== COVER ANIMATIONS ========== */
+    @keyframes titleGlow {
+      0% { opacity: 0; transform: scale(0.8); }
+      60% { opacity: 0.8; }
+      100% { opacity: 1; transform: scale(1); text-shadow: 0 0 12px var(--gold), 0 0 20px var(--gold), 0 0 12px var(--cyan), 0 0 20px var(--cyan), 0 0 12px var(--magenta), 0 0 20px var(--magenta); }
+    }
+    @keyframes slideIn { from { width: 0; } to { width: 120px; } }
+    @keyframes formulaReveal {
+      0% { opacity: 0; transform: translateY(20px); }
+      50% { opacity: 0.6; }
+      100% { opacity: 1; transform: translateY(0); text-shadow: 0 0 10px rgba(255,215,0,0.3), 0 0 16px var(--cyan), 0 0 16px var(--magenta); }
+    }
+    /* ========== SHARED TAG ========== */
+    .tag {
+      display: inline-block; background: rgba(0,30,50,0.6);
+      border: 1px solid rgba(0,200,255,0.3); border-radius: 20px;
+      padding: 8px 24px; font-size: 1rem; letter-spacing: 2px;
+      text-transform: uppercase; color: var(--cyan); margin-bottom: 24px;
+    }
+    /* ========== SHARED TYPOGRAPHY ========== */
+    .slide-title {
+      font-family: 'Orbitron', sans-serif; font-size: 2.8rem; font-weight: 700;
+      margin: 0 0 6px; line-height: 1.2;
+    }
+    .slide-title .gold { color: var(--gold); text-shadow: 0 0 14px var(--gold-glow); }
+    .slide-title .cyan { color: var(--cyan); text-shadow: 0 0 14px var(--cyan-glow); }
+    .slide-title .magenta { color: var(--magenta); text-shadow: 0 0 14px var(--magenta-glow); }
+    .slide-subtitle { font-size: 1.5rem; font-weight: 400; color: var(--text-dim); letter-spacing: 1px; margin-bottom: 8px; }
+    .slide-subtitle-en { font-size: 1.05rem; color: var(--text-dim); opacity: 0.6; letter-spacing: 2px; margin-bottom: 24px; }
+    .divider { width: 120px; height: 2px; background: linear-gradient(90deg, transparent, var(--gold), transparent); margin: 16px auto 20px; }
+    .section-title { font-family: 'Orbitron', sans-serif; font-size: 1.8rem; font-weight: 700; color: var(--gold); margin-bottom: 16px; }
+    .body-text { font-size: 1.1rem; color: var(--text); line-height: 1.7; }
+    .dim-text { font-size: 0.95rem; color: var(--text-dim); line-height: 1.6; }
+    .small-text { font-size: 0.85rem; color: var(--text-dim); }
+    .label-cyan { font-size: 0.95rem; color: var(--cyan); letter-spacing: 1px; }
+    .code-text { font-family: 'JetBrains Mono', monospace; font-size: 1rem; color: var(--cyan); }
+    .highlight-gold { color: var(--gold); font-weight: 600; }
+    .highlight-cyan { color: var(--cyan); font-weight: 600; }
+    .highlight-green { color: var(--green); font-weight: 600; }
+    .highlight-red { color: var(--red); font-weight: 600; }
+    .highlight-purple { color: var(--purple); font-weight: 600; }
+    .highlight-magenta { color: var(--magenta); font-weight: 600; }
+    /* ========== SHARED CARDS ========== */
+    .card {
+      background: var(--dark-card); border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px; padding: 20px 24px; text-align: left;
+    }
+    .card-blue { border-left: 3px solid var(--cyan); }
+    .card-yellow { border-left: 3px solid var(--gold); }
+    .card-red { border-left: 3px solid var(--red); }
+    .card-green { border-left: 3px solid var(--green); }
+    .card-purple { border-left: 3px solid var(--purple); }
+    .card-magenta { border-left: 3px solid var(--magenta); }
+    .card-title { font-size: 1.2rem; font-weight: 700; margin-bottom: 8px; }
+    .card-subtitle { font-size: 0.95rem; color: var(--text-dim); margin-bottom: 10px; }
+    .card-item { font-size: 1.05rem; color: var(--text); line-height: 1.7; padding: 3px 0; }
+    .card-item::before { content: "-"; color: var(--gold); }
+    .card-item.dim::before { color: var(--text-dim); }
+    /* ========== CONTENT AREA ========== */
+    .content-area { flex: 1; width: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 16px; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; width: 100%; }
+    .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; width: 100%; }
+    .four-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; width: 100%; }
+    .text-left { text-align: left; }
+    /* ========== SPECIAL COMPONENTS ========== */
+    .badge { display: inline-block; padding: 4px 14px; border-radius: 6px; font-size: 0.85rem; font-weight: 600; letter-spacing: 1px; }
+    .badge-blue { background: rgba(0,243,255,0.15); color: var(--cyan); border: 1px solid rgba(0,243,255,0.3); }
+    .badge-yellow { background: rgba(255,215,0,0.15); color: var(--gold); border: 1px solid rgba(255,215,0,0.3); }
+    .badge-red { background: rgba(255,77,77,0.15); color: var(--red); border: 1px solid rgba(255,77,77,0.3); }
+    .badge-green { background: rgba(0,200,120,0.15); color: var(--green); border: 1px solid rgba(0,200,120,0.3); }
+    .badge-purple { background: rgba(180,130,255,0.15); color: var(--purple); border: 1px solid rgba(180,130,255,0.3); }
+    .badge-magenta { background: rgba(255,0,200,0.15); color: var(--magenta); border: 1px solid rgba(255,0,200,0.3); }
+    .code-block {
+      background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px; padding: 16px 20px; font-family: 'JetBrains Mono', monospace;
+      font-size: 0.95rem; color: var(--cyan); text-align: left; line-height: 1.7;
+      white-space: pre-wrap; width: 100%;
+    }
+    .quote-box {
+      background: rgba(255,215,0,0.05); border-left: 3px solid var(--gold);
+      border-radius: 0 8px 8px 0; padding: 16px 20px; text-align: left;
+      font-size: 1.1rem; color: var(--text); font-style: italic; line-height: 1.7;
+    }
+    .warn-box {
+      background: rgba(255,77,77,0.08); border: 1px solid rgba(255,77,77,0.3);
+      border-radius: 8px; padding: 14px 20px; font-size: 1rem; color: var(--red);
+      text-align: left; line-height: 1.6;
+    }
+    .success-box {
+      background: rgba(0,200,120,0.08); border: 1px solid rgba(0,200,120,0.3);
+      border-radius: 8px; padding: 14px 20px; font-size: 1rem; color: var(--green);
+      text-align: left; line-height: 1.6;
+    }
+    .info-box {
+      background: rgba(0,243,255,0.06); border: 1px solid rgba(0,243,255,0.2);
+      border-radius: 8px; padding: 14px 20px; font-size: 1rem; color: var(--cyan);
+      text-align: left; line-height: 1.6;
+    }
+    .gold-box {
+      background: rgba(255,215,0,0.08); border: 1px solid rgba(255,215,0,0.3);
+      border-radius: 8px; padding: 14px 20px; font-size: 1rem; color: var(--gold);
+      text-align: left; line-height: 1.6;
+    }
+    .step-number {
+      font-family: 'Orbitron', sans-serif; font-size: 1.4rem; font-weight: 700;
+      display: inline-block; margin-bottom: 4px;
+    }
+    .file-tree { font-family: 'JetBrains Mono', monospace; font-size: 1rem; line-height: 1.8; color: var(--text); }
+    .file-tree .folder { color: var(--gold); } .file-tree .file { color: var(--cyan); }
+    .check { color: var(--green); } .cross { color: var(--red); }
+    .bullet { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 10px; vertical-align: middle; }
+    .bullet-gold { background: var(--gold); } .bullet-cyan { background: var(--cyan); }
+    .bullet-purple { background: var(--purple); } .bullet-green { background: var(--green); }
+    .formula-display {
+      font-family: 'JetBrains Mono', monospace; font-size: 1.6rem; font-weight: 700;
+      color: var(--text); padding: 20px 0; text-align: center; letter-spacing: 1px;
+    }
+    .section-header {
+      display: inline-block; padding: 6px 18px; border-radius: 6px;
+      font-size: 0.9rem; font-weight: 600; letter-spacing: 1px;
+    }
+    .footer-note {
+      font-size: 0.95rem; color: var(--text-dim); text-align: center;
+      padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.06);
+      line-height: 1.6;
+    }
+    .glow-border { border: 1px solid rgba(0,243,255,0.2); box-shadow: 0 0 12px rgba(0,243,255,0.08); }
+    /* ========== COVER SLIDE 1 ========== */
+    .cover-title { font-family: 'Orbitron', sans-serif; font-size: 4.2rem; font-weight: 700; margin: 20px 0; line-height: 1.1; animation: titleGlow 1.2s ease-out both; }
+    .cover-title .ct1 { color: var(--gold); text-shadow: 0 0 18px var(--gold-glow); }
+    .cover-title .ct2 { color: var(--cyan); text-shadow: 0 0 18px var(--cyan-glow); }
+    .cover-title .ct3 { color: var(--magenta); text-shadow: 0 0 18px var(--magenta-glow); }
+    .cover-sub { font-size: 2.2rem; font-weight: 600; margin: 20px 0; letter-spacing: 1px; color: var(--text); }
+    .cover-divider { width: 120px; height: 2px; background: linear-gradient(90deg, transparent, var(--gold), transparent); margin: 24px auto; animation: slideIn 0.7s ease-out 1.2s both; }
+    .cover-journey { font-size: 1.2rem; opacity: 0.8; letter-spacing: 2px; margin: 8px 0; color: var(--text-dim); }
+    .cover-footnote { font-size: 1.05rem; opacity: 0.7; margin-top: 12px; color: var(--text-dim); animation: fadeInUp 0.7s ease-out 2.0s both; }
+  </style>
+</head>
+<body>
+  <div id="snowfield"></div>
+
+  <div class="deck" id="deck">
+
+    <!-- ==================== SLIDE 1: 封面页 ==================== -->
+    <div class="slide active" data-idx="1">
+      <div class="tag anim-in d1">CHAPTER · 03</div>
+      <div class="cover-title anim-in d2">
+        <span class="ct1">Claude Code</span> <span class="ct2">Harness</span>
+      </div>
+      <div class="cover-sub anim-in d3">核心要点解析指南</div>
+      <div class="cover-divider"></div>
+      <div class="cover-journey anim-in d4">第 3 章：Skills 工程实践</div>
+      <div class="cover-journey anim-in d5" style="font-style:italic;opacity:0.6;">Skills Engineering Practice</div>
+      <div class="cover-footnote">掌握 Skill 的本质、结构与工程落地方法</div>
+    </div>
+
+    <!-- ==================== SLIDE 2: 本章导览 ==================== -->
+    <div class="slide" data-idx="2">
+      <div class="content-area">
+        <div class="two-col" style="max-width:1600px;">
+          <!-- 左侧：上一章回顾 -->
+          <div class="card card-purple anim-left d1" style="border-left:3px solid var(--purple);">
+            <div class="section-header" style="background:rgba(180,130,255,0.15);color:var(--purple);margin-bottom:16px;">第二章回顾</div>
+            <div style="font-size:1.3rem;font-weight:600;margin-bottom:16px;color:var(--text);">上一章掌握的核心</div>
+            <div class="card-item dim" style="font-size:1.05rem;"><span class="bullet bullet-gold"></span>记忆系统 CLAUDE.md 核心</div>
+            <div class="card-item dim" style="font-size:1.05rem;"><span class="bullet bullet-gold"></span>四层作用域全景</div>
+            <div class="card-item dim" style="font-size:1.05rem;"><span class="bullet bullet-gold"></span>结构化写法与最佳实践</div>
+            <div class="card-item dim" style="font-size:1.05rem;"><span class="bullet bullet-gold"></span>CLAUDE.md 全量加载成本</div>
+          </div>
+          <!-- 右侧：本章重点 -->
+          <div class="card card-yellow anim-right d2" style="border-left:3px solid var(--gold);">
+            <div class="section-header" style="background:rgba(255,215,0,0.15);color:var(--gold);margin-bottom:16px;">本章重点</div>
+            <div style="font-size:2.6rem;font-weight:700;margin-bottom:4px;color:var(--gold);">Skills</div>
+            <div style="font-size:2.2rem;font-weight:600;margin-bottom:20px;color:var(--text);">工程实践</div>
+            <div class="card-item dim" style="font-size:1.05rem;"><span class="bullet bullet-cyan"></span>触发即注入，不触发零消耗</div>
+            <div class="card-item dim" style="font-size:1.05rem;"><span class="bullet bullet-cyan"></span>Skill 文件结构与命名规范</div>
+            <div class="card-item dim" style="font-size:1.05rem;"><span class="bullet bullet-cyan"></span>description 精准触发策略</div>
+            <div class="card-item dim" style="font-size:1.05rem;"><span class="bullet bullet-cyan"></span>权限控制与参数注入实战</div>
+            <div style="margin-top:16px;font-size:0.95rem;color:var(--text-dim);">让 Claude 精准执行复杂任务</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 3: 真实场景 ==================== -->
+    <div class="slide" data-idx="3">
+      <div class="content-area">
+        <div class="two-col" style="max-width:1600px;">
+          <!-- 左侧 -->
+          <div class="anim-left d1 text-left" style="display:flex;flex-direction:column;gap:20px;">
+            <div class="badge badge-yellow" style="align-self:flex-start;">[ 真实场景 ]</div>
+            <div style="font-size:3rem;font-weight:700;line-height:1.2;color:var(--text);">每次都要重新交代</div>
+            <div class="quote-box" style="margin-top:8px;">
+              <div style="font-size:1.6rem;color:var(--gold);margin-bottom:8px;">"</div>
+              <div style="font-size:1.15rem;">为什么每次开启新会话<br>都要从头重新交代一遍？</div>
+              <div style="font-size:0.9rem;color:var(--text-dim);margin-top:10px;">• 萌新 · AI 开发工程师</div>
+            </div>
+          </div>
+          <!-- 右侧：三步流程 -->
+          <div class="anim-right d2 text-left" style="display:flex;flex-direction:column;gap:16px;">
+            <!-- STEP 01 -->
+            <div class="card" style="border-left:3px solid var(--cyan);">
+              <div class="step-number" style="color:var(--cyan);">STEP 01</div>
+              <div style="font-size:1.1rem;color:var(--text);margin-top:6px;">每次花 3 分钟交代背景</div>
+              <div style="font-size:0.9rem;color:var(--text-dim);margin-top:4px;">RESTful 规范 · OpenAPI 3.0 · 中英双语输出</div>
+            </div>
+            <!-- STEP 02 -->
+            <div class="card" style="border-left:3px solid var(--gold);">
+              <div class="step-number" style="color:var(--gold);">STEP 02</div>
+              <div style="font-size:1.1rem;color:var(--text);margin-top:6px;">上周这样，上上周也这样</div>
+              <div style="font-size:0.9rem;color:var(--text-dim);margin-top:4px;">相同的知识，每次都要重复投喂</div>
+            </div>
+            <!-- STEP 03 -->
+            <div class="card" style="border-left:3px solid var(--red);">
+              <div class="step-number" style="color:var(--red);">STEP 03</div>
+              <div style="font-size:1.1rem;color:var(--text);margin-top:6px;">切换任务还要重来一遍</div>
+              <div style="font-size:0.9rem;color:var(--text-dim);margin-top:4px;">分明是在为"失忆临时工"反复入职培训</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 4: 问题-方案对比 ==================== -->
+    <div class="slide" data-idx="4">
+      <div class="content-area">
+        <div class="two-col" style="max-width:1600px;">
+          <!-- 左侧：问题 -->
+          <div class="card card-red anim-left d1">
+            <div class="badge badge-red" style="margin-bottom:12px;">问题</div>
+            <div style="font-size:1.1rem;color:var(--text-dim);margin-bottom:6px;">萌新：</div>
+            <div class="quote-box" style="border-left-color:var(--red);background:rgba(255,77,77,0.05);">
+              <div style="font-size:1.05rem;color:var(--text);">"我的 CLAUDE.md 已经两千字了，Claude 每次都要读一遍……成本太高了"</div>
+            </div>
+          </div>
+          <!-- 右侧：方案 -->
+          <div class="card card-green anim-right d2">
+            <div class="badge badge-green" style="margin-bottom:12px;">方案</div>
+            <div style="font-size:1.1rem;color:var(--text-dim);margin-bottom:6px;">大佬：</div>
+            <div class="quote-box" style="border-left-color:var(--green);background:rgba(0,200,120,0.05);">
+              <div style="font-size:1.05rem;color:var(--text);">"CLAUDE.md 是<span class="highlight-green">常驻知识</span>，<span class="highlight-green">Skills</span> 是<span class="highlight-green">按需加载的专属工具包</span>，两者分工不同"</div>
+            </div>
+          </div>
+        </div>
+        <!-- 底部 Skills 说明 -->
+        <div class="card glow-border anim-up d3" style="max-width:700px;margin-top:8px;">
+          <div style="font-size:2rem;font-weight:700;color:var(--gold);margin-bottom:12px; text-align:center;">Skills</div>
+          <div style="font-size:1.15rem;color:var(--text);"><span class="bullet bullet-gold"></span>用户触发时才注入 Prompt</div>
+          <div style="font-size:1.15rem;color:var(--text);"><span class="bullet bullet-gold"></span>不触发 = 零 Token 消耗</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 5: CLAUDE.md vs Skills ==================== -->
+    <div class="slide" data-idx="5">
+      <div class="content-area">
+        <div style="font-size:2.4rem;font-weight:700;color:var(--text);margin-bottom:16px;">
+          CLAUDE.md <span class="highlight-gold" style="font-size:2rem;margin:0 8px;">VS</span> Skills
+        </div>
+        <div class="two-col" style="max-width:1600px;">
+          <!-- 左：CLAUDE.md -->
+          <div class="card card-blue anim-left d1">
+            <div style="font-size:1.5rem;font-weight:700;color:var(--cyan);margin-bottom:4px;">CLAUDE.md</div>
+            <div style="font-size:1rem;color:var(--text-dim);margin-bottom:14px;">常驻知识</div>
+            <div class="card-item dim"><span class="bullet bullet-cyan"></span>每次对话自动加载</div>
+            <div class="card-item dim"><span class="bullet bullet-cyan"></span>全局生效，始终存在</div>
+            <div class="card-item dim"><span class="bullet bullet-cyan"></span>适合：项目规范、代码风格</div>
+            <div class="card-item dim"><span class="bullet bullet-cyan"></span>适合：团队约定、架构原则</div>
+            <div class="code-block" style="margin-top:12px;font-size:0.85rem;"># 代码风格
+- 使用 TypeScript
+- 缩进 2 空格
+- 优先函数式编程</div>
+          </div>
+          <!-- 右：Skills -->
+          <div class="card card-yellow anim-right d2">
+            <div style="font-size:1.5rem;font-weight:700;color:var(--gold);margin-bottom:4px;">Skills</div>
+            <div style="font-size:1rem;color:var(--text-dim);margin-bottom:14px;">按需知识</div>
+            <div class="card-item dim"><span class="bullet bullet-gold"></span>用户触发时才加载</div>
+            <div class="card-item dim"><span class="bullet bullet-gold"></span>按需激活，零闲置成本</div>
+            <div class="card-item dim"><span class="bullet bullet-gold"></span>适合：复杂任务流程</div>
+            <div class="card-item dim"><span class="bullet bullet-gold"></span>适合：专属工具、一次性操作</div>
+            <div class="code-block" style="margin-top:12px;font-size:0.85rem;">/smarter-commit
+/code-review
+/financial-analysis
+<span style="color:var(--gold);">→ 触发时注入 Prompt</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 6: Skills 本质定义 ==================== -->
+    <div class="slide" data-idx="6">
+      <div class="content-area">
+        <div style="font-size:2.4rem;font-weight:700;color:var(--text);margin-bottom:12px;">Skills 本质定义</div>
+        <div class="quote-box anim-in d1" style="max-width:600px;text-align:center;border-left:none;background:rgba(255,215,0,0.06);border:1px solid rgba(255,215,0,0.2);">
+          <div style="font-size:1.6rem;font-weight:700;color:var(--gold);">"教而不劳"</div>
+          <div style="font-size:1.05rem;color:var(--text-dim);margin-top:6px;">提前教会 Claude，用时零消耗</div>
+        </div>
+        <!-- 公式 -->
+        <div class="formula-display anim-scale d2" style="font-size:1.8rem;">
+          <span style="color:var(--cyan);">Markdown</span> + <span style="color:var(--gold);">YAML</span> = <span style="color:var(--green);">Skill</span>
+        </div>
+        <div style="font-size:0.9rem;color:var(--text-dim);margin-bottom:20px;">指令文件 &nbsp;&nbsp;&nbsp;&nbsp; 元数据 &nbsp;&nbsp;&nbsp;&nbsp; 可复用工具</div>
+        <!-- 三列 -->
+        <div class="three-col" style="max-width:1400px;">
+          <div class="card card-yellow anim-up d3" style="text-align:center;">
+            <div style="font-size:2.2rem;margin-bottom:8px;">⚡</div>
+            <div style="font-size:1.2rem;font-weight:700;color:var(--gold);margin-bottom:6px;">按需激活</div>
+            <div style="font-size:1rem;color:var(--text-dim);">不触发<br>零 Token 消耗</div>
+          </div>
+          <div class="card card-blue anim-up d4" style="text-align:center;">
+            <div style="font-size:2.2rem;margin-bottom:8px;">🔒</div>
+            <div style="font-size:1.2rem;font-weight:700;color:var(--cyan);margin-bottom:6px;">权限隔离</div>
+            <div style="font-size:1rem;color:var(--text-dim);">每个 Skill<br>独立权限控制</div>
+          </div>
+          <div class="card card-green anim-up d5" style="text-align:center;">
+            <div style="font-size:2.2rem;margin-bottom:8px;">🔄</div>
+            <div style="font-size:1.2rem;font-weight:700;color:var(--green);margin-bottom:6px;">可复用</div>
+            <div style="font-size:1rem;color:var(--text-dim);">团队共享<br>版本控制</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 7: Skill 目录结构 ==================== -->
+    <div class="slide" data-idx="7">
+      <div class="content-area">
+        <div style="font-size:2.4rem;font-weight:700;color:var(--text);margin-bottom:4px;">Skill <span class="highlight-gold">目录结构</span></div>
+        <div class="label-cyan anim-in d1" style="margin-bottom:16px;">[ 标准文件 · 组织规范 ]</div>
+        <div class="two-col" style="max-width:1600px;">
+          <!-- 左侧：文件树 -->
+          <div class="card anim-left d2" style="background:rgba(0,0,0,0.5);">
+            <div style="font-size:1rem;color:var(--text-dim);margin-bottom:10px;">文件树</div>
+            <div class="file-tree" style="font-size:1.1rem;">
+              <div><span class="folder">📁 my-skill/</span></div>
+              <div style="padding-left:28px;"><span class="file">📄 SKILL.md</span> — 主文件</div>
+              <div style="padding-left:28px;"><span class="folder">📁 scripts/</span></div>
+              <div style="padding-left:56px;"><span class="file">run.sh</span></div>
+              <div style="padding-left:56px;"><span class="file">analyze.py</span></div>
+              <div style="padding-left:28px;"><span class="folder">📁 templates/</span></div>
+              <div style="padding-left:56px;"><span class="file">report.md</span></div>
+              <div style="padding-left:28px;"><span style="color:var(--text-dim);">README.md</span> — 不识别</div>
+            </div>
+          </div>
+          <!-- 右侧：四张说明卡 -->
+          <div style="display:flex;flex-direction:column;gap:12px;" class="anim-right d3">
+            <div class="card card-yellow" style="padding:14px 18px;">
+              <div style="font-size:1.1rem;font-weight:700;color:var(--gold);margin-bottom:4px;">SKILL.md</div>
+              <div style="font-size:0.95rem;color:var(--text-dim);">技能主文件，包含 YAML 元数据 + Markdown 指令，触发时注入 Prompt</div>
+            </div>
+            <div class="card card-blue" style="padding:14px 18px;">
+              <div style="font-size:1.1rem;font-weight:700;color:var(--cyan);margin-bottom:4px;">scripts/</div>
+              <div style="font-size:0.95rem;color:var(--text-dim);">辅助脚本，由 SKILL.md 中的 allowed-tools 调用执行</div>
+            </div>
+            <div class="card" style="padding:14px 18px;border-left:3px solid var(--text-dim);">
+              <div style="font-size:1.1rem;font-weight:700;color:var(--text);margin-bottom:4px;">templates/</div>
+              <div style="font-size:0.95rem;color:var(--text-dim);">输出模板，供 Claude 填充生成标准格式文档</div>
+            </div>
+            <div class="card card-red" style="padding:14px 18px;">
+              <div style="font-size:1.1rem;font-weight:700;color:var(--red);margin-bottom:4px;">README.md ✗</div>
+              <div style="font-size:0.95rem;color:var(--text-dim);">不会被识别为技能主文件，命名必须是 SKILL.md</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 8: 命名规则 ==================== -->
+    <div class="slide" data-idx="8">
+      <div class="content-area">
+        <div style="font-size:2.4rem;font-weight:700;color:var(--text);margin-bottom:20px;">命名规则：<span class="highlight-gold">三条铁则</span></div>
+        <div class="three-col" style="max-width:1600px;">
+          <!-- 01 -->
+          <div class="card card-blue anim-up d1">
+            <div class="badge badge-blue" style="margin-bottom:10px;">01</div>
+            <div style="font-size:1.3rem;font-weight:700;color:var(--cyan);margin-bottom:6px;">主文件命名</div>
+            <div style="font-size:2rem;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--text);margin-bottom:8px;">SKILL.md</div>
+            <div style="font-size:0.95rem;color:var(--text-dim);margin-bottom:12px;">必须大写 SKILL.md，Claude Code 才能识别，触发时自动注入 Prompt</div>
+            <div style="font-size:0.95rem;"><span class="check">✓</span> SKILL.md</div>
+            <div style="font-size:0.95rem;"><span class="cross">✗</span> README.md</div>
+            <div style="font-size:0.95rem;"><span class="cross">✗</span> skill.md</div>
+          </div>
+          <!-- 02 -->
+          <div class="card card-yellow anim-up d2">
+            <div class="badge badge-yellow" style="margin-bottom:10px;">02</div>
+            <div style="font-size:1.3rem;font-weight:700;color:var(--gold);margin-bottom:6px;">目录命名规范</div>
+            <div style="font-size:1.6rem;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--gold);margin-bottom:8px;">kebab-case</div>
+            <div style="font-size:0.95rem;color:var(--text-dim);margin-bottom:12px;">使用全小写连字符格式，与 CLI 命令风格保持一致，便于 tab 补全</div>
+            <div style="font-size:0.95rem;"><span class="check">✓</span> smart-commit</div>
+            <div style="font-size:0.95rem;"><span class="check">✓</span> code-review</div>
+            <div style="font-size:0.95rem;"><span class="cross">✗</span> SmartCommit</div>
+          </div>
+          <!-- 03 -->
+          <div class="card card-red anim-up d3">
+            <div class="badge badge-red" style="margin-bottom:10px;">03</div>
+            <div style="font-size:1.3rem;font-weight:700;color:var(--red);margin-bottom:6px;">README 不识别</div>
+            <div style="font-size:1.6rem;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--red);margin-bottom:8px;">README.md</div>
+            <div style="font-size:0.95rem;color:var(--text-dim);margin-bottom:12px;">README.md 仅作人类文档，不被识别为技能入口，职责严格分离</div>
+            <div class="code-block" style="font-size:0.85rem;padding:10px 14px;">smart-commit/
+  <span style="color:var(--cyan);">SKILL.md</span> ← 主文件
+  <span style="color:var(--text-dim);">README.md</span> ← 忽略</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 9: YAML 元数据三维度 ==================== -->
+    <div class="slide" data-idx="9">
+      <div class="content-area">
+        <div style="font-size:2.4rem;font-weight:700;color:var(--text);margin-bottom:16px;">YAML 元数据<span class="highlight-gold">三维度</span></div>
+        <!-- YAML 代码 -->
+        <div class="code-block anim-in d1" style="max-width:1000px;font-size:1rem;margin-bottom:20px;line-height:1.8;">---
+<span style="color:var(--cyan);">name</span>: smart-commit          <span style="color:var(--text-dim);"># 身份维度</span>
+<span style="color:var(--cyan);">description</span>: 分析 git 变更，生成规范提交  <span style="color:var(--text-dim);"># 身份维度</span>
+<span style="color:var(--gold);">allowed-tools</span>: [Bash, Read] <span style="color:var(--text-dim);"># 权限维度</span>
+<span style="color:var(--purple);">user-invocable</span>: true        <span style="color:var(--text-dim);"># 执行维度</span>
+---</div>
+        <!-- 三列 -->
+        <div class="three-col" style="max-width:1600px;">
+          <div class="card card-blue anim-up d2">
+            <div style="font-size:1.15rem;font-weight:700;color:var(--cyan);margin-bottom:8px;">身份维度</div>
+            <div style="font-size:0.95rem;font-family:'JetBrains Mono',monospace;color:var(--cyan);margin-bottom:6px;">name &nbsp; description</div>
+            <div style="font-size:0.95rem;color:var(--text-dim);line-height:1.6;">技能的唯一标识与语义描述，决定触发匹配逻辑，name 即命令名</div>
+          </div>
+          <div class="card card-yellow anim-up d3">
+            <div style="font-size:1.15rem;font-weight:700;color:var(--gold);margin-bottom:8px;">权限维度</div>
+            <div style="font-size:0.95rem;font-family:'JetBrains Mono',monospace;color:var(--gold);margin-bottom:6px;">allowed-tools</div>
+            <div style="font-size:0.95rem;color:var(--text-dim);line-height:1.6;">精确控制 Claude 可调用的工具列表，实现最小权限原则，防止越权操作</div>
+          </div>
+          <div class="card card-purple anim-up d4">
+            <div style="font-size:1.15rem;font-weight:700;color:var(--purple);margin-bottom:8px;">执行维度</div>
+            <div style="font-size:0.95rem;font-family:'JetBrains Mono',monospace;color:var(--purple);margin-bottom:6px;">user-invocable</div>
+            <div style="font-size:0.95rem;font-family:'JetBrains Mono',monospace;color:var(--purple);margin-bottom:6px;">disable-model-invocation</div>
+            <div style="font-size:0.95rem;color:var(--text-dim);line-height:1.6;">控制技能的激活方式与执行模式，支持显式命令与纯脚本两种形态</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 10: 两个正交字段 ==================== -->
+    <div class="slide" data-idx="10">
+      <div class="content-area">
+        <div style="font-size:2.4rem;font-weight:700;color:var(--text);margin-bottom:20px;">两个<span class="highlight-gold">正交字段</span></div>
+        <div class="two-col" style="max-width:1500px;">
+          <!-- FIELD 01 -->
+          <div class="card card-blue anim-left d1">
+            <div class="small-text" style="margin-bottom:6px;color:var(--text-dim);">FIELD 01</div>
+            <div style="font-size:1.5rem;font-weight:700;color:var(--cyan);margin-bottom:12px;font-family:'JetBrains Mono',monospace;">disable-model-invocation</div>
+            <div style="font-size:1.05rem;color:var(--text);margin-bottom:14px;">设为 true 时，Skill 只执行脚本，不调用 Claude AI 模型</div>
+            <div class="code-block" style="font-size:0.9rem;padding:10px 14px;margin-bottom:12px;">disable-model-invocation: <span style="color:var(--gold);">true</span></div>
+            <div style="font-size:1rem;color:var(--text);"><span class="check">✓</span> 纯脚本任务：代码格式化、文件批处理</div>
+            <div style="font-size:1rem;color:var(--text);"><span class="check">✓</span> 确定性操作：不需要 AI 判断的自动化</div>
+            <div style="font-size:1rem;color:var(--cyan);">☺ 零模型 Token 消耗，极低成本</div>
+          </div>
+          <!-- FIELD 02 -->
+          <div class="card card-yellow anim-right d2">
+            <div class="small-text" style="margin-bottom:6px;color:var(--text-dim);">FIELD 02</div>
+            <div style="font-size:1.5rem;font-weight:700;color:var(--gold);margin-bottom:12px;font-family:'JetBrains Mono',monospace;">user-invocable</div>
+            <div style="font-size:1.05rem;color:var(--text);margin-bottom:14px;">设为 true 时，用户可直接用 /skill-name 命令显式触发</div>
+            <div class="code-block" style="font-size:0.9rem;padding:10px 14px;margin-bottom:12px;">user-invocable: <span style="color:var(--gold);">true</span></div>
+            <div style="font-size:1rem;color:var(--text);">☼ 显式触发：<span class="code-text">/smart-commit</span></div>
+            <div style="font-size:1rem;color:var(--text);">☼ 同时支持语义匹配自动激活</div>
+            <div style="font-size:1rem;color:var(--green);">☑ Tab 补全提示可用的技能列表</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 11: 渐进式披露 ==================== -->
+    <div class="slide" data-idx="11">
+      <div class="content-area">
+        <div style="font-size:2.2rem;font-weight:700;color:var(--text);margin-bottom:16px;">渐进式披露 图书馆模型：<span class="highlight-gold">三层加载结构</span></div>
+        <div class="two-col" style="max-width:1600px;">
+          <!-- 左侧：三阶流程 -->
+          <div class="anim-left d1" style="display:flex;flex-direction:column;gap:10px;">
+            <div class="card card-blue" style="display:flex;align-items:center;gap:16px;">
+              <div style="font-family:'Orbitron',sans-serif;font-size:1.4rem;font-weight:700;color:var(--cyan);min-width:80px;">TIER 1</div>
+              <div>
+                <div style="font-size:1.15rem;font-weight:700;color:var(--text);">索引层 / Index</div>
+                <div style="font-size:0.9rem;color:var(--text-dim);">极简目录，始终加载，仅包含章节名称与简介</div>
+                <div style="font-size:0.85rem;font-family:'JetBrains Mono',monospace;color:var(--text-dim);margin-top:2px;">index.md</div>
+              </div>
+            </div>
+            <div style="text-align:center;font-size:1.4rem;color:var(--gold);">↓</div>
+            <div class="card card-yellow" style="display:flex;align-items:center;gap:16px;">
+              <div style="font-family:'Orbitron',sans-serif;font-size:1.4rem;font-weight:700;color:var(--gold);min-width:80px;">TIER 2</div>
+              <div>
+                <div style="font-size:1.15rem;font-weight:700;color:var(--text);">章节层 / Chapter</div>
+                <div style="font-size:0.9rem;color:var(--text-dim);">按需读取特定章节，包含详细规则与示例</div>
+                <div style="font-size:0.85rem;font-family:'JetBrains Mono',monospace;color:var(--text-dim);margin-top:2px;">ch-N.md</div>
+              </div>
+            </div>
+            <div style="text-align:center;font-size:1.4rem;color:var(--gold);">↓</div>
+            <div class="card" style="border-left:3px solid var(--green);display:flex;align-items:center;gap:16px;">
+              <div style="font-family:'Orbitron',sans-serif;font-size:1.4rem;font-weight:700;color:var(--green);min-width:80px;">TIER 3</div>
+              <div>
+                <div style="font-size:1.15rem;font-weight:700;color:var(--text);">附录层 / Appendix</div>
+                <div style="font-size:0.9rem;color:var(--text-dim);">深度参考资料，仅在特定查询时读取</div>
+                <div style="font-size:0.85rem;font-family:'JetBrains Mono',monospace;color:var(--text-dim);margin-top:2px;">appendix/</div>
+              </div>
+            </div>
+          </div>
+          <!-- 右侧：三栏信息 -->
+          <div class="anim-right d2" style="display:flex;flex-direction:column;gap:20px;">
+            <div class="card card-blue" style="padding:14px 18px; margin-top: 30px;">
+              <div style="font-size:1rem;font-weight:700;color:var(--cyan);margin-bottom:6px;">核心思想</div>
+              <div style="font-size:0.95rem;color:var(--text-dim);line-height:1.6;">如同图书馆：先看目录，再找书架，按需取书。不一次性加载全部内容</div>
+            </div>
+            <div class="card card-yellow" style="padding:14px 18px;">
+              <div style="font-size:1rem;font-weight:700;color:var(--gold);margin-bottom:6px;">Token 效率</div>
+              <div style="font-size:0.95rem;color:var(--text-dim);line-height:1.6;">索引层仅需数十 Token，只在需要时读取完整章节，节省 90% 以上消耗</div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:0.9rem;color:var(--gold);margin-top:6px;">index.md: ~50 tokens<br>chapter: ~500 tokens<br>appendix: ~2000 tokens</div>
+            </div>
+            <div class="card" style="border-left:3px solid var(--green);padding:14px 18px;">
+              <div style="font-size:1rem;font-weight:700;color:var(--green);margin-bottom:6px;">适用场景</div>
+              <div style="font-size:0.95rem;color:var(--text-dim);line-height:1.6;">大型文档、财务分析、合规手册等需要深度知识但使用频率低的复杂技能</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 12: Token 对比 ==================== -->
+    <div class="slide" data-idx="12">
+      <div class="content-area">
+        <div style="font-size:2.4rem;font-weight:700;color:var(--text);margin-bottom:20px;">Token 对比：<span class="highlight-cyan">内联</span> vs <span class="highlight-gold">渐进式</span></div>
+        <!-- 对比表 -->
+        <div class="card anim-in d1" style="max-width:1200px;width:100%;padding:0;overflow:hidden;">
+          <!-- 表头 -->
+          <div style="display:grid;grid-template-columns:2fr 1.5fr 1.5fr;background:rgba(0,0,0,0.4);border-bottom:1px solid rgba(255,255,255,0.1);">
+            <div style="padding:14px 20px;font-size:1rem;color:var(--text-dim);font-weight:600;">规模</div>
+            <div style="padding:14px 20px;font-size:1rem;color:var(--cyan);font-weight:600;text-align:center;">全量加载</div>
+            <div style="padding:14px 20px;font-size:1rem;color:var(--gold);font-weight:600;text-align:center;">渐进式披露</div>
+          </div>
+          <!-- 行 -->
+          <div style="display:grid;grid-template-columns:2fr 1.5fr 1.5fr;border-bottom:1px solid rgba(255,255,255,0.05);">
+            <div style="padding:12px 20px;font-size:1rem;color:var(--text);">小型文档 (~100行)</div>
+            <div style="padding:12px 20px;font-size:1rem;color:var(--cyan);text-align:center;">~800 tokens</div>
+            <div style="padding:12px 20px;font-size:1rem;color:var(--gold);text-align:center;">~800 tokens</div>
+          </div>
+          <div style="display:grid;grid-template-columns:2fr 1.5fr 1.5fr;border-bottom:1px solid rgba(255,255,255,0.05);">
+            <div style="padding:12px 20px;font-size:1rem;color:var(--text);">中型文档 (~500行)</div>
+            <div style="padding:12px 20px;font-size:1rem;color:var(--cyan);text-align:center;">~4,000 tokens</div>
+            <div style="padding:12px 20px;font-size:1rem;color:var(--gold);text-align:center;">~200 tokens</div>
+          </div>
+          <div style="display:grid;grid-template-columns:2fr 1.5fr 1.5fr;border-bottom:1px solid rgba(255,255,255,0.05);">
+            <div style="padding:12px 20px;font-size:1rem;color:var(--text);">大型文档 (~2000行)</div>
+            <div style="padding:12px 20px;font-size:1rem;color:var(--cyan);text-align:center;">~16,000 tokens</div>
+            <div style="padding:12px 20px;font-size:1rem;color:var(--gold);text-align:center;">~500 tokens</div>
+          </div>
+          <div style="display:grid;grid-template-columns:2fr 1.5fr 1.5fr;">
+            <div style="padding:12px 20px;font-size:1rem;color:var(--text);">超大型 (~5000行)</div>
+            <div style="padding:12px 20px;font-size:1rem;color:var(--red);text-align:center;">~40,000 tokens
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-exclamation-triangle" viewBox="0 0 16 16">
+                <path d="M7.938 2.016A.13.13 0 0 1 8.002 2a.13.13 0 0 1 .063.016.15.15 0 0 1 .054.057l6.857 11.667c.036.06.035.124.002.183a.2.2 0 0 1-.054.06.1.1 0 0 1-.066.017H1.146a.1.1 0 0 1-.066-.017.2.2 0 0 1-.054-.06.18.18 0 0 1 .002-.183L7.884 2.073a.15.15 0 0 1 .054-.057m1.044-.45a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767z"/>
+                <path d="M7.002 12a1 1 0 1 1 2 0 1 1 0 0 1-2 0M7.1 5.995a.905.905 0 1 1 1.8 0l-.35 3.507a.552.552 0 0 1-1.1 0z"/>
+              </svg>
+            </div>
+            <div style="padding:12px 20px;font-size:1rem;color:var(--gold);text-align:center;">~800 tokens</div>
+          </div>
+        </div>
+        <!-- 结论 -->
+        <div class="success-box anim-up d2" style="max-width:1200px;margin-top:12px;text-align:center;">
+          小型文档（≤500行）无需渐进式，直接内联更简单；超过 500 行后，渐进式可节省 <span style="color:var(--green);font-weight:700;font-size:1.1rem;">95%+ Token</span>，是大型知识库的<span style="font-weight:700;">最优选择</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 13: description Token 预算 ==================== -->
+    <div class="slide" data-idx="13">
+      <div class="content-area">
+        <div style="font-size:2.4rem;font-weight:700;color:var(--text);margin-bottom:16px;"><span class="highlight-cyan">description</span> <span class="highlight-gold">Token 预算</span></div>
+        <!-- 核心规则 -->
+        <div class="card glow-border anim-scale d1" style="max-width:800px;text-align:center;padding:24px 32px;margin-bottom:16px;">
+          <div style="font-size:1.1rem;color:var(--text-dim);margin-bottom:6px;">description 字段 ≤</div>
+          <div style="font-family:'Orbitron',sans-serif;font-size:4rem;font-weight:700;color:var(--gold);line-height:1;">100</div>
+          <div style="font-size:1.1rem;color:var(--text-dim);margin-top:4px;">tokens</div>
+          <div style="font-size:0.95rem;color:var(--text-dim);margin-top:8px;">语义匹配的唯一依据，写好它等于写好触发逻辑</div>
+        </div>
+        <div class="two-col" style="max-width:1400px;">
+          <!-- 左：预算分配 -->
+          <div class="anim-left d2">
+            <div style="font-size:1.1rem;font-weight:600;color:var(--text);margin-bottom:10px;">预算分配参考</div>
+            <div style="display:flex;gap:10px;">
+              <div class="card card-blue" style="flex:1;text-align:center;padding:12px;">
+                <div style="font-size:0.9rem;color:var(--text-dim);">核心功能</div>
+                <div style="font-size:1.3rem;font-weight:700;color:var(--cyan);">~40</div>
+                <div style="font-size:0.8rem;color:var(--text-dim);">tokens</div>
+              </div>
+              <div class="card card-yellow" style="flex:1;text-align:center;padding:12px;">
+                <div style="font-size:0.9rem;color:var(--text-dim);">触发场景</div>
+                <div style="font-size:1.3rem;font-weight:700;color:var(--gold);">~35</div>
+                <div style="font-size:0.8rem;color:var(--text-dim);">tokens</div>
+              </div>
+              <div class="card" style="flex:1;text-align:center;padding:12px;border-left:3px solid var(--green);">
+                <div style="font-size:0.9rem;color:var(--text-dim);">关键词</div>
+                <div style="font-size:1.3rem;font-weight:700;color:var(--green);">~25</div>
+                <div style="font-size:0.8rem;color:var(--text-dim);">tokens</div>
+              </div>
+            </div>
+          </div>
+          <!-- 右：三条技巧 -->
+          <div class="anim-right d3" style="text-align: left; margin-left: 200px;">
+            <div style="font-size:1.1rem;font-weight:600;color:var(--text);margin-bottom:10px;">三条写作技巧</div>
+            <div style="font-size:1rem;color:var(--text);line-height:1.8;">
+              <div>1️⃣ 用动宾短语：分析变更、生成提交</div>
+              <div>2️⃣ 列举触发词：<span class="code-text">git commit</span>，提交代码</div>
+              <div>3️⃣ 说明边界：仅用于 git 操作</div>
+            </div>
+          </div>
+        </div>
+        <!-- 警告 -->
+        <div class="warn-box anim-up d4" style="max-width:1400px;margin-top:12px;">
+          ⚠️ description 超过 100 tokens 后匹配准确率下降；低于 20 tokens 则过于模糊，容易漏触发或误触发
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 14: 双通道触发机制 ==================== -->
+    <div class="slide" data-idx="14">
+      <div class="content-area">
+        <div style="font-size:2.4rem;font-weight:700;color:var(--text);margin-bottom:4px;">双通道触发机制</div>
+        <div class="label-cyan anim-in d1" style="margin-bottom:20px;">[ 显式命令 · 语义匹配 ]</div>
+        <div class="two-col" style="max-width:1600px;">
+          <!-- CHANNEL A -->
+          <div class="card card-blue anim-left d2">
+            <div style="font-size:1.2rem;font-weight:700;color:var(--cyan);margin-bottom:14px;">显式命令触发（CHANNEL A）</div>
+            <div style="margin-bottom:10px;">
+              <div style="font-size:0.9rem;color:var(--text-dim);margin-bottom:4px;">用户输入</div>
+              <div class="code-block" style="font-size:1.1rem;padding:10px 14px;">/smart-commit</div>
+            </div>
+            <div style="margin-bottom:10px;">
+              <div style="font-size:0.9rem;color:var(--text-dim);margin-bottom:4px;">匹配逻辑</div>
+              <div style="font-size:1rem;color:var(--text);">精确匹配 name 字段</div>
+            </div>
+            <div style="margin-bottom:10px;">
+              <div style="font-size:0.9rem;color:var(--text-dim);margin-bottom:4px;">结果</div>
+              <div style="font-size:1rem;color:var(--text);">注入 SKILL.md 内容<br>执行技能指令</div>
+            </div>
+            <div style="font-size:0.9rem;color:var(--cyan);margin-top:8px;">需要 user-invocable: true</div>
+          </div>
+          <!-- CHANNEL B -->
+          <div class="card card-yellow anim-right d3">
+            <div style="font-size:1.2rem;font-weight:700;color:var(--gold);margin-bottom:14px;">语义匹配触发（CHANNEL B）</div>
+            <div style="margin-bottom:10px;">
+              <div style="font-size:0.9rem;color:var(--text-dim);margin-bottom:4px;">用户输入</div>
+              <div class="code-block" style="font-size:1.1rem;padding:10px 14px;color:var(--gold);">"帮我提交这些改动"</div>
+            </div>
+            <div style="margin-bottom:10px;">
+              <div style="font-size:0.9rem;color:var(--text-dim);margin-bottom:4px;">匹配逻辑</div>
+              <div style="font-size:1rem;color:var(--text);">语义匹配 description 字段<br>置信度超过阈值后触发</div>
+            </div>
+            <div style="margin-bottom:10px;">
+              <div style="font-size:0.9rem;color:var(--text-dim);margin-bottom:4px;">结果</div>
+              <div style="font-size:1rem;color:var(--text);">自动激活技能<br>无需显式命令</div>
+            </div>
+            <div style="font-size:0.9rem;color:var(--gold);margin-top:8px;">description 质量决定匹配准确率</div>
+          </div>
+        </div>
+        <div class="footer-note anim-up d4">显式命令直接精确，语义匹配更智能。选择触发模式，平衡精度与便利</div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 15: description 是技能的灵魂 ==================== -->
+    <div class="slide" data-idx="15">
+      <div class="content-area">
+        <div style="font-size:2.4rem;font-weight:700;color:var(--text);margin-bottom:8px;">description 是技能的<span class="highlight-gold">灵魂</span></div>
+        <div class="formula-display anim-in d1" style="font-size:1.4rem;margin-bottom:16px;">
+          好的 description = <span style="color:var(--gold);">触发词</span> + <span style="color:var(--cyan);">功能</span> + <span style="color:var(--green);">边界</span>
+        </div>
+        <div class="three-col" style="max-width:1600px;">
+          <!-- 过于模糊 -->
+          <div class="card card-red anim-up d2">
+            <div style="font-size:1.1rem;font-weight:700;color:var(--red);margin-bottom:10px;"><span class="cross">✗</span> 过于模糊</div>
+            <div class="quote-box" style="border-left-color:var(--red);background:rgba(255,77,77,0.05);font-size:0.95rem;padding:12px 14px;">
+              "帮助处理 git 操作"
+            </div>
+            <div style="font-size:0.9rem;color:var(--text-dim);margin-top:8px;line-height:1.6;">→ 无功能描述，无触发场景，模型无法判断何时激活</div>
+          </div>
+          <!-- 过于冗长 -->
+          <div class="card card-red anim-up d3">
+            <div style="font-size:1.1rem;font-weight:700;color:var(--red);margin-bottom:10px;"><span class="cross">✗</span> 过于冗长</div>
+            <div class="quote-box" style="border-left-color:var(--red);background:rgba(255,77,77,0.05);font-size:0.85rem;padding:12px 14px;">
+              "当用户想要提交代码时，分析所有改动，考虑代码风格，生成符合 Conventional Commits 规范的提交消息……"
+            </div>
+            <div style="font-size:0.9rem;color:var(--text-dim);margin-top:8px;line-height:1.6;">→ 超过 100 tokens，匹配精度下降，细节属于 SKILL.md 正文</div>
+          </div>
+          <!-- 恰到好处 -->
+          <div class="card card-green anim-up d4">
+            <div style="font-size:1.1rem;font-weight:700;color:var(--green);margin-bottom:10px;"><span class="check">✓</span> 恰到好处</div>
+            <div class="quote-box" style="border-left-color:var(--green);background:rgba(0,200,120,0.05);font-size:0.9rem;padding:12px 14px;">
+              "分析 git 变更，生成符合 Conventional Commits 规范的提交消息。触发词：提交、commit、git"
+            </div>
+            <div style="font-size:0.9rem;color:var(--green);margin-top:8px;line-height:1.6;">→ 明确功能 + 触发词 + 规范边界，约 40 tokens</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 16: 三步黄金策略 ==================== -->
+    <div class="slide" data-idx="16">
+      <div class="content-area">
+        <div style="font-size:2.4rem;font-weight:700;color:var(--text);margin-bottom:20px;">三步<span class="highlight-gold">黄金策略</span></div>
+        <div class="three-col" style="max-width:1600px;">
+          <!-- 01 -->
+          <div class="card card-blue anim-up d1">
+            <div class="badge badge-blue" style="margin-bottom:10px;">01</div>
+            <div style="font-size:1.3rem;font-weight:700;color:var(--cyan);margin-bottom:8px;">写什么</div>
+            <div style="font-size:0.95rem;color:var(--text-dim);margin-bottom:10px;">动宾短语描述核心功能，精确说明 Skill 能做什么</div>
+            <div style="font-size:0.95rem;color:var(--text);line-height:1.7;">
+              <div>• <span class="highlight-cyan">"分析 git 变更"</span></div>
+              <div>• <span class="highlight-cyan">"生成测试报告"</span></div>
+              <div>• <span class="highlight-cyan">"审查代码质量"</span></div>
+            </div>
+          </div>
+          <!-- 02 -->
+          <div class="card card-yellow anim-up d2">
+            <div class="badge badge-yellow" style="margin-bottom:10px;">02</div>
+            <div style="font-size:1.3rem;font-weight:700;color:var(--gold);margin-bottom:8px;">何时触发</div>
+            <div style="font-size:0.95rem;color:var(--text-dim);margin-bottom:10px;">列出自然语言触发词，覆盖用户可能的表述方式</div>
+            <div style="font-size:0.95rem;color:var(--text);line-height:1.7;">
+              <div>• <span class="highlight-gold">"触发词：提交、commit"</span></div>
+              <div>• <span class="highlight-gold">"当用户需要 git 操作"</span></div>
+              <div>• <span class="highlight-gold">"用于 PR 合并前"</span></div>
+            </div>
+          </div>
+          <!-- 03 -->
+          <div class="card card-purple anim-up d3">
+            <div class="badge badge-purple" style="margin-bottom:10px;">03</div>
+            <div style="font-size:1.3rem;font-weight:700;color:var(--purple);margin-bottom:8px;">不适用于</div>
+            <div style="font-size:0.95rem;color:var(--text-dim);margin-bottom:10px;">明确排除边界，防止误触发，提高精准度</div>
+            <div style="font-size:0.95rem;color:var(--text);line-height:1.7;">
+              <div>• <span class="highlight-purple">"不适用于代码审查"</span></div>
+              <div>• <span class="highlight-purple">"仅限 git 操作场景"</span></div>
+              <div>• <span class="highlight-purple">"不处理部署流程"</span></div>
+            </div>
+          </div>
+        </div>
+        <!-- 黄金公式 -->
+        <div class="gold-box anim-up d4" style="max-width:1400px;margin-top:12px;text-align:center;">
+          黄金公式：[功能动词 + 对象] + [触发场景] + [边界排除] = 完美 description<br>
+          控制在 <span style="font-weight:700;font-size:1.1rem;">40–80 tokens</span> 之间，语义密度最高
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 17: 触发失败 vs 触发过度 ==================== -->
+    <div class="slide" data-idx="17">
+      <div class="content-area">
+        <div style="font-size:2.4rem;font-weight:700;color:var(--text);margin-bottom:20px;">触发失败 vs 触发过度</div>
+        <div class="two-col" style="max-width:1500px;">
+          <!-- 左：触发失败 -->
+          <div class="card card-red anim-left d1">
+            <div style="font-size:1.2rem;font-weight:700;color:var(--red);margin-bottom:6px;">触发失败 / Under-trigger</div>
+            <div style="font-family:'Orbitron',sans-serif;font-size:3.5rem;font-weight:700;color:var(--red);line-height:1;margin-bottom:8px;">56%</div>
+            <div style="font-size:0.95rem;color:var(--text-dim);margin-bottom:12px;">由 description 过于模糊导致</div>
+            <div class="quote-box" style="border-left-color:var(--red);background:rgba(255,77,77,0.05);font-size:0.9rem;padding:12px 14px;margin-bottom:10px;">
+              "用户说了提交代码，Skill 没有激活，Claude 徒手操作 git"
+            </div>
+            <div style="font-size:0.95rem;color:var(--text);line-height:1.8;">
+              → 用户不知道 Skill 存在<br>
+              → 丢失标准化的提交格式<br>
+              → 需要手动重复操作
+            </div>
+          </div>
+          <!-- 右：触发过度 -->
+          <div class="card card-yellow anim-right d2">
+            <div style="font-size:1.2rem;font-weight:700;color:var(--gold);margin-bottom:6px;">触发过度 / Over-trigger</div>
+            <div style="font-size:2rem;font-weight:700;color:var(--gold);margin-bottom:8px;">噪音</div>
+            <div style="font-size:0.95rem;color:var(--text-dim);margin-bottom:12px;">由 description 过于细化导致</div>
+            <div class="quote-box" style="border-left-color:var(--gold);background:rgba(255,215,0,0.05);font-size:0.9rem;padding:12px 14px;margin-bottom:10px;">
+              "用户只是问了一句 git 是什么，Skill 就开始执行提交流程"
+            </div>
+            <div style="font-size:0.95rem;color:var(--text);line-height:1.8;">
+              → 打断用户正常对话<br>
+              → 浪费大量 Token<br>
+              → 用户体验极差
+            </div>
+          </div>
+        </div>
+        <!-- 验收标准 -->
+        <div class="card glow-border anim-up d3" style="max-width:800px;margin-top:12px;text-align:center;">
+          <div style="font-size:1.1rem;font-weight:700;color:var(--text);margin-bottom:10px;">验收标准（黄金区间）</div>
+          <div style="display:flex;justify-content:center;gap:40px;font-size:1.05rem;">
+            <div><span style="color:var(--green);font-size:1.2rem;">●</span> 意图明确时 100% 触发</div>
+            <div><span style="color:var(--text-dim);font-size:1.2rem;">○</span> 闲聊/问答时 0% 触发</div>
+            <div><span style="color:var(--gold);font-size:1.2rem;">✧</span> 模糊意图时询问确认</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 18: 参考型 vs 任务型 ==================== -->
+    <div class="slide" data-idx="18">
+      <div class="content-area">
+        <div style="font-size:2.4rem;font-weight:700;color:var(--text);margin-bottom:20px;">参考型 vs 任务型</div>
+        <div class="two-col" style="max-width:1500px;">
+          <!-- 参考型 -->
+          <div class="card card-blue anim-left d1">
+            <div style="font-size:1.4rem;font-weight:700;color:var(--cyan);margin-bottom:4px;">参考型 Skill</div>
+            <div style="font-size:0.95rem;color:var(--text-dim);margin-bottom:14px;">Reference Skill</div>
+            <div style="font-size:1rem;color:var(--text);line-height:2;">
+              <div>∝ 只读权限，不执行写操作</div>
+              <div>Q 提供标准、规范、知识库</div>
+              <div>Ø 安全把关，不产生副作用</div>
+            </div>
+            <div style="font-size:0.95rem;color:var(--text-dim);margin:10px 0 8px;">示例：代码审查 Skill</div>
+            <div class="code-block" style="font-size:0.9rem;padding:10px 14px;">allowed-tools: [Read]</div>
+            <div style="font-size:0.9rem;color:var(--text-dim);margin-top:6px;">• 只读取文件，不修改<br>• 输出审查报告</div>
+          </div>
+          <!-- 任务型 -->
+          <div class="card card-yellow anim-right d2">
+            <div style="font-size:1.4rem;font-weight:700;color:var(--gold);margin-bottom:4px;">任务型 Skill</div>
+            <div style="font-size:0.95rem;color:var(--text-dim);margin-bottom:14px;">Task Skill</div>
+            <div style="font-size:1rem;color:var(--text);line-height:2;">
+              <div>⚙ 执行具体动作，产生实际效果</div>
+              <div>❉ 调用 Bash、Edit、Write 等工具</div>
+              <div>◉ 完成端到端的工作流</div>
+            </div>
+            <div style="font-size:0.95rem;color:var(--text-dim);margin:10px 0 8px;">示例：智能提交 Skill</div>
+            <div class="code-block" style="font-size:0.9rem;padding:10px 14px;">allowed-tools: [Bash, Read]</div>
+            <div style="font-size:0.9rem;color:var(--text-dim);margin-top:6px;">• 执行 git add/commit<br>• 修改文件、创建分支</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 19: 最坏情况测试法 ==================== -->
+    <div class="slide" data-idx="19">
+      <div class="content-area">
+        <div style="font-size:2.4rem;font-weight:700;color:var(--text);margin-bottom:16px;">最坏情况<span class="highlight-gold">测试法</span></div>
+        <div class="gold-box anim-in d1" style="max-width:900px;text-align:center;margin-bottom:20px;font-size:1.15rem;">
+          如果 Claude 完全误解了我的意图…<br>
+          <span style="font-size:1rem;color:var(--text-dim);">想象最坏的情况，选择合适的类型</span>
+        </div>
+        <div class="two-col" style="max-width:1400px;">
+          <!-- 左 -->
+          <div class="card card-yellow anim-left d2" style="text-align:center;">
+            <div style="font-size:2rem;margin-bottom:8px;">↙</div>
+            <div style="font-size:1.3rem;font-weight:700;color:var(--text);margin-bottom:6px;">感到紧张？</div>
+            <div style="font-size:1.5rem;font-weight:700;color:var(--gold);margin-bottom:10px;">→ 任务型</div>
+            <div style="font-size:0.95rem;color:var(--text-dim);line-height:1.6;">操作会产生副作用，需要精确权限控制和步骤确认</div>
+          </div>
+          <!-- 右 -->
+          <div class="card card-blue anim-right d3" style="text-align:center;">
+            <div style="font-size:2rem;margin-bottom:8px;">↘</div>
+            <div style="font-size:1.3rem;font-weight:700;color:var(--text);margin-bottom:6px;">无关痛痒？</div>
+            <div style="font-size:1.5rem;font-weight:700;color:var(--cyan);margin-bottom:10px;">→ 参考型</div>
+            <div style="font-size:0.95rem;color:var(--text-dim);line-height:1.6;">纯知识输出，误解最多输出一份错误报告，不影响系统</div>
+          </div>
+        </div>
+        <!-- 记忆口诀 -->
+        <div class="card glow-border anim-up d4" style="max-width:900px;margin-top:16px;text-align:center;">
+          <div style="font-size:1rem;font-weight:600;color:var(--text);margin-bottom:6px;">记忆口诀</div>
+          <div style="font-size:1.05rem;color:var(--text);line-height:1.7;">
+            会产生<span class="highlight-gold">"后悔操作"</span>的用<span class="highlight-gold">任务型 + 最小权限</span>；<br>
+            只输出文字的用<span class="highlight-cyan">参考型 + 只读权限</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 20: 路由器思维 vs 仓库存思维 ==================== -->
+    <div class="slide" data-idx="20">
+      <div class="content-area">
+        <div style="font-size:2.4rem;font-weight:700;color:var(--text);margin-bottom:20px;">路由器思维 vs 仓库存思维</div>
+        <div class="two-col" style="max-width:1500px;">
+          <!-- 左：仓库存 -->
+          <div class="card card-red anim-left d1">
+            <div style="font-size:1.3rem;font-weight:700;color:var(--red);margin-bottom:12px;"><span class="cross">✗</span> 仓库存思维</div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+              <span class="badge" style="background:rgba(255,255,255,0.08);color:var(--text-dim);border:1px solid rgba(255,255,255,0.15);">代码风格</span>
+              <span class="badge" style="background:rgba(255,255,255,0.08);color:var(--text-dim);border:1px solid rgba(255,255,255,0.15);">Git 规范</span>
+              <span class="badge" style="background:rgba(255,255,255,0.08);color:var(--text-dim);border:1px solid rgba(255,255,255,0.15);">测试规则</span>
+              <span class="badge" style="background:rgba(255,255,255,0.08);color:var(--text-dim);border:1px solid rgba(255,255,255,0.15);">部署流程</span>
+              <span class="badge" style="background:rgba(255,255,255,0.08);color:var(--text-dim);border:1px solid rgba(255,255,255,0.15);">安全扫描</span>
+              <span class="badge" style="background:rgba(255,255,255,0.08);color:var(--text-dim);border:1px solid rgba(255,255,255,0.15);">文档生成</span>
+              <span class="badge" style="background:rgba(255,255,255,0.08);color:var(--text-dim);border:1px solid rgba(255,255,255,0.15);">代码审查</span>
+              <span class="badge" style="background:rgba(255,255,255,0.08);color:var(--text-dim);border:1px solid rgba(255,255,255,0.15);">性能优化</span>
+              <span class="badge" style="background:rgba(255,255,255,0.08);color:var(--text-dim);border:1px solid rgba(255,255,255,0.15);">其它.....</span>
+            </div>
+            <div style="font-size:1rem;color:var(--red);line-height:1.6;">所有知识塞进一个 SKILL.md<br>每次都全量加载，浪费严重</div>
+          </div>
+          <!-- 右：路由器 -->
+          <div class="card card-yellow anim-right d2">
+            <div style="font-size:1.3rem;font-weight:700;color:var(--gold);margin-bottom:12px;"><span class="check">✓</span> 路由器思维</div>
+            <div style="text-align:center;margin-bottom:12px;">
+              <div style="font-size:1.6rem;font-weight:700;color:var(--gold);">路由器 SKILL</div>
+              <div style="font-size:1rem;color:var(--text-dim);margin-top:4px;">↓ 按需路由</div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+              <div class="badge badge-yellow" style="padding:8px;text-align:center;font-size:0.95rem;">✏️ smart-commit</div>
+              <div class="badge badge-blue" style="padding:8px;text-align:center;font-size:0.95rem;">🔍 code-review</div>
+              <div class="badge badge-purple" style="padding:8px;text-align:center;font-size:0.95rem;">⊕ financial</div>
+              <div class="badge badge-green" style="padding:8px;text-align:center;font-size:0.95rem;">📞 deploy</div>
+            </div>
+            <div style="font-size:1rem;color:var(--green);margin-top:12px;text-align:center;">每个子技能独立、精准、按需加载</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 21: 契约式 description + 500行原则 ==================== -->
+    <div class="slide" data-idx="21">
+      <div class="content-area">
+        <div style="font-size:2.2rem;font-weight:700;color:var(--text);margin-bottom:16px;">契约式 description + <span class="highlight-gold">500行原则</span></div>
+        <div class="two-col" style="max-width:1600px;">
+          <!-- 左：对比 -->
+          <div class="anim-left d1" style="display:flex;flex-direction:column;gap:12px;">
+            <div style="font-size:1.1rem;font-weight:600;color:var(--text);margin-bottom:4px;">对比</div>
+            <div class="card card-red" style="padding:14px 18px;">
+              <div style="font-size:0.95rem;color:var(--red);margin-bottom:4px;"><span class="cross">✗</span> "帮助处理代码"</div>
+              <div style="font-size:0.9rem;color:var(--text-dim);">模糊，无边界，无触发词</div>
+            </div>
+            <div class="card card-green" style="padding:14px 18px;">
+              <div style="font-size:0.95rem;color:var(--green);margin-bottom:4px;"><span class="check">✓</span> "审查 PR 代码质量，检查安全漏洞和性能问题。用于 PR 合并前。触发词：<span class="highlight-green">审查、review、代码检查</span>"</div>
+              <div style="font-size:0.9rem;color:var(--text-dim);">契约式：功能 + 边界 + 触发词</div>
+            </div>
+          </div>
+          <!-- 右：500行原则 -->
+          <div class="anim-right d2">
+            <div class="card" style="background:rgba(0,0,0,0.5);border:1px solid rgba(255,215,0,0.2);">
+              <div style="font-size:1.2rem;font-weight:700;color:var(--gold);margin-bottom:10px;">500行原则</div>
+              <div style="font-size:1rem;color:var(--text);margin-bottom:6px;">单个 SKILL.md 超过 <span class="highlight-gold" style="font-size:1.2rem;">500</span> 行，应当拆分</div>
+              <div style="font-size:0.95rem;color:var(--text-dim);line-height:1.8;">
+                <div>• 一个 Skill 一个职责</div>
+                <div>• 多职责 → 多 Skill</div>
+                <div>• 用路由器 Skill 统一调度</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- 重构对比 -->
+        <div style="display:flex;align-items:center;gap:20px;margin-top:14px;" class="anim-up d3">
+          <div class="card card-red" style="flex:1;text-align:center;padding:14px;">
+            <div style="font-size:0.9rem;color:var(--red);margin-bottom:4px;">重构前</div>
+            <div class="code-text" style="color:var(--text-dim);">dev-tools/SKILL.md (800行)</div>
+          </div>
+          <div style="font-size:2rem;color:var(--gold);">→</div>
+          <div class="card card-green" style="flex:1;text-align:center;padding:14px;">
+            <div style="font-size:0.9rem;color:var(--green);margin-bottom:4px;">重构后</div>
+            <div class="code-text" style="color:var(--text);">smart-commit/ &nbsp; code-review/ &nbsp; test-runner/</div>
+          </div>
+        </div>
+        <div class="footer-note anim-up d4">职责混合 → 拆分为独立 Skill，提高触发精准度</div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 22: allowed-tools 四种模板 ==================== -->
+    <div class="slide" data-idx="22">
+      <div class="content-area">
+        <div style="font-size:2.4rem;font-weight:700;color:var(--text);margin-bottom:20px;">allowed-tools <span class="highlight-gold">四种模板</span></div>
+        <div class="four-col" style="max-width:1500px;">
+          <!-- 审计型 -->
+          <div class="card card-blue anim-up d1">
+            <div style="font-size:1.8rem;margin-bottom:6px;">📋</div>
+            <div style="font-size:1.2rem;font-weight:700;color:var(--cyan);margin-bottom:8px;">审计型</div>
+            <div class="code-block" style="font-size:0.85rem;padding:10px 14px;margin-bottom:8px;">allowed-tools:
+- Read
+- Glob</div>
+            <div style="font-size:0.9rem;color:var(--text-dim);line-height:1.5;">只读权限，代码审查、文档分析，零副作用</div>
+          </div>
+          <!-- 生成型 -->
+          <div class="card card-green anim-up d2">
+            <div style="font-size:1.8rem;margin-bottom:6px;">✏️</div>
+            <div style="font-size:1.2rem;font-weight:700;color:var(--green);margin-bottom:8px;">生成型</div>
+            <div class="code-block" style="font-size:0.85rem;padding:10px 14px;margin-bottom:8px;">allowed-tools:
+- Write
+- Edit
+- Read</div>
+            <div style="font-size:0.9rem;color:var(--text-dim);line-height:1.5;">读取后生成或修改文件，代码生成、重构</div>
+          </div>
+          <!-- 分析型 -->
+          <div class="card card-yellow anim-up d3">
+            <div style="font-size:1.8rem;margin-bottom:6px;">🔍</div>
+            <div style="font-size:1.2rem;font-weight:700;color:var(--gold);margin-bottom:8px;">分析型</div>
+            <div class="code-block" style="font-size:0.85rem;padding:10px 14px;margin-bottom:8px;">allowed-tools:
+- Read
+- Bash(git log:*)
+- Bash(git diff:*)</div>
+            <div style="font-size:0.9rem;color:var(--text-dim);line-height:1.5;">读取 + 有限 Bash，分析代码历史和变更</div>
+          </div>
+          <!-- 执行型 -->
+          <div class="card card-purple anim-up d4">
+            <div style="font-size:1.8rem;margin-bottom:6px;">⚙</div>
+            <div style="font-size:1.2rem;font-weight:700;color:var(--purple);margin-bottom:8px;">执行型</div>
+            <div class="code-block" style="font-size:0.85rem;padding:10px 14px;margin-bottom:8px;">allowed-tools:
+- Bash(git add:*)
+- Bash(git commit:*)
+- Read</div>
+            <div style="font-size:0.9rem;color:var(--text-dim);line-height:1.5;">精确 Bash 前缀，最小权限执行 git 操作</div>
+          </div>
+        </div>
+        <div class="info-box anim-up d5" style="max-width:1200px;margin-top:10px;font-size:0.95rem;">
+          ※ <span class="code-text">Bash(git status:*)</span> — 前缀匹配：允许 git status 及所有参数，但禁止 git push 等危险操作
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 23: Bash 精细化权限控制 ==================== -->
+    <div class="slide" data-idx="23">
+      <div class="content-area">
+        <div style="font-size:2.4rem;font-weight:700;color:var(--text);margin-bottom:20px;">Bash <span class="highlight-gold">精细化权限控制</span></div>
+        <div class="two-col" style="max-width:1500px;">
+          <!-- 左：精准前缀匹配 -->
+          <div class="anim-left d1" style="display:flex;flex-direction:column;gap:12px;">
+            <div style="font-size:1.2rem;font-weight:700;color:var(--green);margin-bottom:4px;"><span class="check">✓</span> 精准前缀匹配</div>
+            <div class="card card-green" style="padding:14px 18px;">
+              <div class="code-text" style="margin-bottom:4px;">Bash(git status:*)</div>
+              <div style="font-size:0.9rem;color:var(--text-dim);">✓ 允许查看状态，禁止所有写操作</div>
+            </div>
+            <div class="card card-green" style="padding:14px 18px;">
+              <div class="code-text" style="margin-bottom:4px;">Bash(git add:*)</div>
+              <div style="font-size:0.9rem;color:var(--text-dim);">✓ 允许暂存文件，禁止 push/reset</div>
+            </div>
+            <div class="card card-green" style="padding:14px 18px;">
+              <div class="code-text" style="margin-bottom:4px;">Bash(git commit:*)</div>
+              <div style="font-size:0.9rem;color:var(--text-dim);">✓ 仅允许提交，精确控制</div>
+            </div>
+          </div>
+          <!-- 右：危险 -->
+          <div class="anim-right d2">
+            <div class="card" style="background:rgba(255,77,77,0.12);border:2px solid var(--red);padding:20px;">
+              <div style="font-size:1.3rem;font-weight:700;color:var(--red);margin-bottom:12px;">⚠ 危险：Bash(*)</div>
+              <div class="code-text" style="color:var(--red);margin-bottom:12px;font-size:1.1rem;">Bash(*) = 允许执行任意 Shell 命令</div>
+              <div style="font-size:1rem;color:var(--red);line-height:2;">
+                <div>※ 提示注入攻击窃取密钥</div>
+                <div>※ 删除生产数据库</div>
+                <div>※ 植入后门脚本</div>
+                <div>※ 向外网发送敏感信息</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="gold-box anim-up d3" style="max-width:1000px;margin-top:12px;text-align:center;">
+          遵循<span class="highlight-gold" style="font-weight:700;">最小权限原则</span>：只授予完成任务所需的最小权限
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 24: 参数传递 + 动态上下文注入 ==================== -->
+    <div class="slide" data-idx="24">
+      <div class="content-area">
+        <div style="font-size:2.2rem;font-weight:700;color:var(--text);margin-bottom:16px;">参数传递 + <span class="highlight-gold">动态上下文注入</span></div>
+        <div class="two-col" style="max-width:1500px;">
+          <!-- 左：$ARGUMENTS -->
+          <div class="card card-blue anim-left d1">
+            <div style="font-size:1.4rem;font-weight:700;color:var(--cyan);margin-bottom:12px;font-family:'JetBrains Mono',monospace;">$ARGUMENTS</div>
+            <div class="code-block" style="font-size:0.95rem;margin-bottom:10px;line-height:1.7;">/skill "feat: 新增登录"
+→ <span style="color:var(--gold);">$ARGUMENTS</span> = "feat: 新增登录"
+→ <span style="color:var(--gold);">$ARGUMENTS[0]</span> = "feat"</div>
+            <div style="font-size:0.95rem;color:var(--text-dim);">运行时传入参数，让用户自定义 Skill 的行为</div>
+          </div>
+          <!-- 右：动态注入 -->
+          <div class="card card-yellow anim-right d2">
+            <div style="font-size:1.4rem;font-weight:700;color:var(--gold);margin-bottom:12px;">动态注入 !<span class="code-text">命令</span></div>
+            <div class="code-block" style="font-size:0.95rem;margin-bottom:10px;line-height:1.7;">当前状态：!`git status`
+变更统计：!`git diff --stat`
+→ <span style="color:var(--green);">Claude 首次响应即可行动</span></div>
+            <div style="font-size:0.95rem;color:var(--text-dim);">发送前在 Shell 执行，结果内联到 Prompt，无需额外工具调用</div>
+          </div>
+        </div>
+        <!-- 效果对比表 -->
+        <div class="card anim-up d3" style="max-width:1200px;width:100%;padding:0;overflow:hidden;margin-top:12px;">
+          <div style="display:grid;grid-template-columns:2fr 2fr 2fr;background:rgba(0,0,0,0.4);border-bottom:1px solid rgba(255,255,255,0.1);">
+            <div style="padding:10px 16px;font-size:0.9rem;color:var(--text-dim);font-weight:600;">维度</div>
+            <div style="padding:10px 16px;font-size:0.9rem;color:var(--cyan);font-weight:600;text-align:center;">静态 $ARGUMENTS</div>
+            <div style="padding:10px 16px;font-size:0.9rem;color:var(--gold);font-weight:600;text-align:center;">动态注入 !`cmd`</div>
+          </div>
+          <div style="display:grid;grid-template-columns:2fr 2fr 2fr;border-bottom:1px solid rgba(255,255,255,0.05);">
+            <div style="padding:8px 16px;font-size:0.9rem;color:var(--text);">上下文来源</div>
+            <div style="padding:8px 16px;font-size:0.9rem;color:var(--text-dim);text-align:center;">用户手动输入</div>
+            <div style="padding:8px 16px;font-size:0.9rem;color:var(--text-dim);text-align:center;">Shell 自动采集</div>
+          </div>
+          <div style="display:grid;grid-template-columns:2fr 2fr 2fr;border-bottom:1px solid rgba(255,255,255,0.05);">
+            <div style="padding:8px 16px;font-size:0.9rem;color:var(--text);">首次响应速度</div>
+            <div style="padding:8px 16px;font-size:0.9rem;color:var(--text-dim);text-align:center;">需要工具调用</div>
+            <div style="padding:8px 16px;font-size:0.9rem;color:var(--gold);text-align:center;">直接行动，速度快 50%</div>
+          </div>
+          <div style="display:grid;grid-template-columns:2fr 2fr 2fr;">
+            <div style="padding:8px 16px;font-size:0.9rem;color:var(--text);">适用场景</div>
+            <div style="padding:8px 16px;font-size:0.9rem;color:var(--text-dim);text-align:center;">需要用户指定参数</div>
+            <div style="padding:8px 16px;font-size:0.9rem;color:var(--text-dim);text-align:center;">可自动获取的环境数据</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 25: 作用域优先级 + 三类实战 Skill ==================== -->
+    <div class="slide" data-idx="25">
+      <div class="content-area">
+        <div style="font-size:2.2rem;font-weight:700;color:var(--text);margin-bottom:16px;">作用域优先级 + <span class="highlight-gold">三类实战 Skill</span></div>
+        <div class="two-col" style="max-width:1600px;">
+          <!-- 左：优先级 -->
+          <div class="anim-left d1" style="display:flex;flex-direction:column;gap:10px;">
+            <div style="font-size:1.1rem;font-weight:600;color:var(--text);margin-bottom:4px;">优先级（高 → 低）</div>
+            <div class="card card-yellow" style="display:flex;align-items:center;gap:14px;padding:14px 18px;">
+              <div style="font-family:'Orbitron',sans-serif;font-size:2rem;font-weight:700;color:var(--gold);">1</div>
+              <div>
+                <div style="font-size:1.1rem;font-weight:700;color:var(--text);">项目级</div>
+                <div class="code-text" style="font-size:0.9rem;">.claude/skills/</div>
+                <div style="font-size:0.85rem;color:var(--text-dim);">仅当前项目生效</div>
+              </div>
+            </div>
+            <div class="card card-blue" style="display:flex;align-items:center;gap:14px;padding:14px 18px;">
+              <div style="font-family:'Orbitron',sans-serif;font-size:2rem;font-weight:700;color:var(--cyan);">2</div>
+              <div>
+                <div style="font-size:1.1rem;font-weight:700;color:var(--text);">用户级</div>
+                <div class="code-text" style="font-size:0.9rem;">~/.claude/skills/</div>
+                <div style="font-size:0.85rem;color:var(--text-dim);">个人所有项目</div>
+              </div>
+            </div>
+            <div class="card card-purple" style="display:flex;align-items:center;gap:14px;padding:14px 18px;">
+              <div style="font-family:'Orbitron',sans-serif;font-size:2rem;font-weight:700;color:var(--purple);">3</div>
+              <div>
+                <div style="font-size:1.1rem;font-weight:700;color:var(--text);">企业级</div>
+                <div class="code-text" style="font-size:0.9rem;">/etc/claude/skills/</div>
+                <div style="font-size:0.85rem;color:var(--text-dim);">全员默认生效</div>
+              </div>
+            </div>
+            <div style="font-size:0.85rem;color:var(--text-dim);line-height:1.5;">同名 Skill 按优先级解析，项目级最高。建议纳入 Git 版本控制，团队成员克隆后自动生效</div>
+          </div>
+          <!-- 右：实战 Skill -->
+          <div class="anim-right d2" style="display:flex;flex-direction:column;gap:10px;">
+            <div style="font-size:1.1rem;font-weight:600;color:var(--text);margin-bottom:4px;">实战 Skill</div>
+            <div class="card card-blue" style="padding:14px 18px;">
+              <div style="font-size:0.9rem;color:var(--cyan);margin-bottom:2px;">📌 参考型</div>
+              <div style="font-size:1.2rem;font-weight:700;color:var(--text);margin-bottom:4px;">code-review</div>
+              <div style="font-size:0.9rem;color:var(--text-dim);">只读权限，读取代码文件，输出质量审查报告。</div>
+              <div class="code-text" style="font-size:0.85rem;margin-top:4px;">allowed-tools: [Read]</div>
+            </div>
+            <div class="card card-yellow" style="padding:14px 18px;">
+              <div style="font-size:0.9rem;color:var(--gold);margin-bottom:2px;">🎯 任务型</div>
+              <div style="font-size:1.2rem;font-weight:700;color:var(--text);margin-bottom:4px;">smart-commit</div>
+              <div style="font-size:0.9rem;color:var(--text-dim);">动态注入 git 状态，生成规范提交。</div>
+              <div class="code-text" style="font-size:0.85rem;margin-top:4px;">allowed-tools: [Bash(git:*), Read]</div>
+            </div>
+            <div class="card card-purple" style="padding:14px 18px;">
+              <div style="font-size:0.9rem;color:var(--purple);margin-bottom:2px;">🧩 复合型</div>
+              <div style="font-size:1.2rem;font-weight:700;color:var(--text);margin-bottom:4px;">financial-analysis</div>
+              <div style="font-size:0.9rem;color:var(--text-dim);">渐进式三层架构，路由器设计 + 执行脚本，完整企业级 Skill 范例</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 26: 下章预告 ==================== -->
+    <div class="slide" data-idx="26">
+      <div class="content-area" style="justify-content:center;">
+        <div class="badge badge-yellow anim-in d1" style="font-size:1rem;padding:8px 20px;margin-bottom:20px;">[ 下章预告 ]</div>
+        <div style="font-size:3.2rem;font-weight:700;color:var(--text);margin-bottom:24px;" class="anim-up d2">Hooks 工程实践</div>
+        <div class="card glow-border anim-scale d3" style="max-width:800px;text-align:center;padding:30px 40px;">
+          <div style="font-size:1.2rem;color:var(--purple);margin-bottom:8px;font-weight:600;">NEXT · CHAPTER 04</div>
+          <div style="font-size:1.6rem;font-weight:700;color:var(--purple);margin-bottom:16px;">Hooks · 事件驱动自动化</div>
+          <div style="font-size:1.05rem;color:var(--text-dim);line-height:1.8;">
+            工具调用前后自动触发的钩子机制<br>
+            实现代码格式化、安全检查、规范强制执行<br>
+            让 AI 工作流更安全、更可靠
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 27: 预留尾页 ==================== -->
+    <div class="slide" data-idx="27">
+      <div class="content-area" style="justify-content:center;">
+        <div class="tag anim-in d1">CHAPTER · 03</div>
+        <div style="font-size:3rem;font-weight:700;color:var(--text);margin-bottom:12px;" class="anim-up d2">本章小结</div>
+        <div class="divider anim-in d3"></div>
+        <div style="font-size:1.3rem;color:var(--text-dim);max-width:800px;line-height:1.8;" class="anim-up d4">
+          Skills 工程实践的核心要点回顾
+        </div>
+        <div style="font-size:1rem;color:var(--text-dim);margin-top:40px;opacity:0.5;" class="anim-in d5">尾页内容待补充</div>
+      </div>
+    </div>
+
+  </div><!-- /deck -->
+
+  <!-- NAV -->
+  <div class="nav" id="nav">
+    <button id="prevBtn" title="上一页">‹</button>
+    <div class="dots" id="dots"></div>
+    <div class="page-info" id="pageInfo">1 / 27</div>
+    <button id="nextBtn" title="下一页">›</button>
+  </div>
+
+  <script>
+    // ========== SNOWFLAKE GENERATOR ==========
+    (function createSnow() {
+      var field = document.getElementById('snowfield');
+      var count = 45;
+      for (var i = 0; i < count; i++) {
+        var flake = document.createElement('div');
+        flake.className = 'snowflake';
+        var size = 1.5 + Math.random() * 4;
+        var left = Math.random() * 100;
+        var dur = 10 + Math.random() * 18;
+        var sway = 3 + Math.random() * 6;
+        var delay = Math.random() * dur;
+        var opacity = 0.15 + Math.random() * 0.5;
+        flake.style.cssText =
+          'width:' + size + 'px;height:' + size + 'px;' +
+          'left:' + left + '%;' +
+          'opacity:' + opacity + ';' +
+          'animation-duration:' + dur + 's,' + sway + 's;' +
+          'animation-delay:' + delay + 's,' + (delay * 0.4) + 's;';
+        field.appendChild(flake);
+      }
+    })();
+
+    // ========== DECK ENGINE ==========
+    var slides = Array.from(document.querySelectorAll('.slide'));
+    var totalSlides = slides.length;
+    var current = 0;
+
+    var dotsContainer = document.getElementById('dots');
+    var pageInfo = document.getElementById('pageInfo');
+    var prevBtn = document.getElementById('prevBtn');
+    var nextBtn = document.getElementById('nextBtn');
+
+    // Create dots
+    slides.forEach(function(_, i) {
+      var dot = document.createElement('div');
+      dot.className = 'dot' + (i === 0 ? ' active' : '');
+      dot.addEventListener('click', function() { goTo(i); });
+      dotsContainer.appendChild(dot);
+    });
+
+    function goTo(idx) {
+      if (idx < 0 || idx >= totalSlides) return;
+      slides[current].classList.remove('active');
+      current = idx;
+      slides[current].classList.add('active');
+      // Reset animations
+      slides[current].querySelectorAll('[class*="anim-"]').forEach(function(el) {
+        el.style.animation = 'none';
+        el.offsetHeight;
+        el.style.animation = '';
+      });
+      // Also reset cover-specific animations
+      slides[current].querySelectorAll('.cover-title, .cover-divider, .cover-formula, .cover-footnote').forEach(function(el) {
+        el.style.animation = 'none';
+        el.offsetHeight;
+        el.style.animation = '';
+      });
+      updateNav();
+      savePos();
+    }
+
+    function updateNav() {
+      var slideNum = current + 1;
+      pageInfo.textContent = slideNum + ' / ' + totalSlides;
+      dotsContainer.querySelectorAll('.dot').forEach(function(d, i) {
+        d.classList.toggle('active', i === current);
+      });
+    }
+
+    prevBtn.addEventListener('click', function() { goTo(current - 1); });
+    nextBtn.addEventListener('click', function() { goTo(current + 1); });
+
+    // Keyboard nav
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') {
+        e.preventDefault();
+        goTo(current + 1);
+      }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        goTo(current - 1);
+      }
+      if (e.key === 'Home') { e.preventDefault(); goTo(0); }
+      if (e.key === 'End') { e.preventDefault(); goTo(totalSlides - 1); }
+    });
+
+    // Persist position
+    function savePos() {
+      try { localStorage.setItem('ch3-slide', current); } catch(e) {}
+    }
+    function loadPos() {
+      try {
+        var saved = parseInt(localStorage.getItem('ch3-slide'), 10);
+        if (!isNaN(saved) && saved >= 0 && saved < totalSlides) {
+          goTo(saved);
+          return true;
+        }
+      } catch(e) {}
+      return false;
+    }
+
+    // Responsive scale
+    function rescale() {
+      var deck = document.getElementById('deck');
+      var padX = 40, padY = 120;
+      var scale = Math.min(
+        (window.innerWidth - padX) / 1920,
+        (window.innerHeight - padY) / 1080
+      );
+      deck.style.transform = 'scale(' + (scale * 1.15) + ')';
+    }
+    window.addEventListener('resize', rescale);
+    rescale();
+
+    // Init
+    if (!loadPos()) goTo(0);
+  </script>
+</body>
+</html>

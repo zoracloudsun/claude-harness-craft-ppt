@@ -1,0 +1,2261 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>第 2 章 · 记忆系统工程实践 · 1/26</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    /*
+     * DESIGN SYSTEM — inherited from 模板.html
+     * Colors: --gold #FFD700 / --cyan #00F3FF / --magenta #FF00C8 / --dark #0A0A0A
+     * Fonts:  Orbitron (titles) · Inter (body) · JetBrains Mono (code/labels)
+     * Visual: grid background + snowflake particles + glow animations
+     */
+
+    :root {
+      --gold: #FFD700;
+      --cyan: #00F3FF;
+      --magenta: #FF00C8;
+      --dark: #0A0A0A;
+      --dark-card: rgba(15, 15, 20, 0.85);
+      --grid: rgba(40, 40, 40, 0.4);
+      --text: #E8E8E8;
+      --text-dim: rgba(255, 255, 255, 0.55);
+      --gold-glow: rgba(255, 215, 0, 0.6);
+      --cyan-glow: rgba(0, 243, 255, 0.6);
+      --magenta-glow: rgba(255, 0, 200, 0.6);
+      --red: #FF4D4D;
+      --green: #00C878;
+      --purple: #B482FF;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--dark);
+      font-family: 'Inter', sans-serif;
+      color: white;
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    /* ===== GRID BACKGROUND ===== */
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+      background-size: 32px 32px;
+      z-index: 0;
+      animation: gridPulse 6s infinite alternate;
+    }
+    @keyframes gridPulse { 0% { opacity: .6; } 100% { opacity: .85; } }
+
+    /* ===== SNOWFLAKES ===== */
+    .snowflake {
+      position: fixed;
+      border-radius: 50%;
+      background: white;
+      pointer-events: none;
+      z-index: 1;
+      animation: snowfall linear infinite, snowSway ease-in-out infinite;
+    }
+    @keyframes snowfall {
+      0%   { top: -8px; opacity: 0; }
+      5%   { opacity: 1; }
+      92%  { opacity: .8; }
+      100% { top: 105vh; opacity: 0; }
+    }
+    @keyframes snowSway {
+      0%,100% { transform: translateX(0) rotate(0); }
+      25%     { transform: translateX(18px) rotate(90deg); }
+      50%     { transform: translateX(-12px) rotate(180deg); }
+      75%     { transform: translateX(22px) rotate(270deg); }
+    }
+
+    /* ===== DECK ===== */
+    .deck {
+      width: 1920px;
+      height: 1080px;
+      position: relative;
+      transform-origin: center center;
+      z-index: 10;
+    }
+
+    /* ===== SLIDE BASE ===== */
+    .slide {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 80px 100px 100px;
+      text-align: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .5s ease;
+    }
+    .slide.active { opacity: 1; pointer-events: auto; }
+    .slide:not(.active) { display: none !important; }
+
+    /* ===== SHARED TYPOGRAPHY ===== */
+    .tag {
+      display: inline-block;
+      background: rgba(0,30,50,.6);
+      border: 1px solid rgba(0,200,255,.3);
+      border-radius: 20px;
+      padding: 8px 24px;
+      font-size: 1rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--cyan);
+      margin-bottom: 24px;
+    }
+
+    .slide-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 3.6rem;
+      font-weight: 700;
+      margin: 12px 0 8px;
+      line-height: 1.15;
+    }
+    .slide-title .gold   { color: var(--gold); text-shadow: 0 0 14px var(--gold-glow); }
+    .slide-title .cyan   { color: var(--cyan); text-shadow: 0 0 14px var(--cyan-glow); }
+    .slide-title .magenta{ color: var(--magenta); text-shadow: 0 0 14px var(--magenta-glow); }
+
+    .slide-subtitle {
+      font-size: 1.5rem;
+      font-weight: 400;
+      color: var(--text-dim);
+      letter-spacing: 1px;
+      margin-bottom: 12px;
+    }
+    .slide-subtitle-en {
+      font-size: 1.05rem;
+      color: var(--text-dim);
+      opacity: .6;
+      letter-spacing: 2px;
+      margin-bottom: 24px;
+    }
+    .divider {
+      width: 120px;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--gold), transparent);
+      margin: 20px auto 28px;
+    }
+
+    /* ===== NAV ===== */
+    .nav {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      z-index: 100;
+      background: rgba(10,10,10,.8);
+      border: 1px solid rgba(255,255,255,.1);
+      border-radius: 40px;
+      padding: 10px 28px;
+      backdrop-filter: blur(10px);
+    }
+    .nav button {
+      background: none;
+      border: 1px solid rgba(255,255,255,.2);
+      color: white;
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 1.1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all .2s;
+    }
+    .nav button:hover {
+      border-color: var(--cyan);
+      color: var(--cyan);
+      box-shadow: 0 0 10px var(--cyan-glow);
+    }
+    .nav .page-info {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .85rem;
+      color: var(--text-dim);
+      min-width: 90px;
+      text-align: center;
+    }
+    .nav .dots { display: flex; gap: 6px; }
+    .nav .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: rgba(255,255,255,.2);
+      cursor: pointer;
+      transition: all .3s;
+    }
+    .nav .dot.active {
+      background: var(--cyan);
+      box-shadow: 0 0 8px var(--cyan-glow);
+    }
+
+    /* ===== ANIMATIONS ===== */
+    @keyframes fadeInUp  { from { opacity:0; transform:translateY(24px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes fadeIn    { from { opacity:0; } to { opacity:1; } }
+    @keyframes scaleIn   { from { opacity:0; transform:scale(.85); } to { opacity:1; transform:scale(1); } }
+    @keyframes slideInL  { from { opacity:0; transform:translateX(-40px); } to { opacity:1; transform:translateX(0); } }
+    @keyframes slideInR  { from { opacity:0; transform:translateX(40px); } to { opacity:1; transform:translateX(0); } }
+    @keyframes arrowPulse { 0%,100% { opacity:.5; transform:scale(1); } 50% { opacity:1; transform:scale(1.15); } }
+    @keyframes pulse { 0%,100% { opacity:.7; } 50% { opacity:1; } }
+    @keyframes titleGlow {
+      0%   { opacity:0; transform:scale(.8); }
+      60%  { opacity:.8; }
+      100% { opacity:1; transform:scale(1); text-shadow:0 0 12px var(--gold),0 0 20px var(--gold),0 0 12px var(--cyan),0 0 20px var(--cyan),0 0 12px var(--magenta),0 0 20px var(--magenta); }
+    }
+    @keyframes slideIn { from { width: 0; } to { width: 120px; } }
+    @keyframes coneReveal {
+      0%   { opacity: 0; transform: scale(0.7); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+
+    .anim-up    { animation: fadeInUp .6s ease-out both; }
+    .anim-in    { animation: fadeIn .6s ease-out both; }
+    .anim-scale { animation: scaleIn .7s ease-out both; }
+    .anim-left  { animation: slideInL .6s ease-out both; }
+    .anim-right { animation: slideInR .6s ease-out both; }
+    .d1 { animation-delay: .1s; } .d2 { animation-delay: .25s; } .d3 { animation-delay: .4s; }
+    .d4 { animation-delay: .55s; } .d5 { animation-delay: .7s; } .d6 { animation-delay: .85s; }
+    .d7 { animation-delay: 1s; } .d8 { animation-delay: 1.15s; }
+
+    /* ===================== SLIDE 1: CHAPTER COVER ===================== */
+    .ch2-cover {  overflow: hidden; }
+    .ch2-cover .cover-cone {
+      position: absolute;
+      top: 116px;
+      left: -10%;
+      width: 120%;
+      height: 100%;
+      clip-path: polygon(50% 8%, -5% 100%, 105% 100%);
+      background:
+        radial-gradient(ellipse 60% 50% at 50% 8%, rgba(255, 215, 0, 0.15) 0%, transparent 70%),
+        radial-gradient(ellipse 100% 60% at 50% 8%, rgba(255, 215, 0, 0.06) 0%, transparent 100%),
+        linear-gradient(180deg, transparent 0%, rgba(255, 215, 0, 0.08) 8%, rgba(255, 215, 0, 0.02) 45%, transparent 100%);
+      pointer-events: none;
+      animation: coneReveal 1.8s ease-out both;
+    }
+    .ch2-cover .cover-cone::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      clip-path: polygon(50% 8%, 20% 100%, 80% 100%);
+      background: radial-gradient(ellipse 30% 40% at 50% 8%, rgba(255, 215, 0, 0.1) 0%, transparent 100%);
+    }
+    .ch2-cover-content { position: relative; z-index: 2; text-align: center; }
+    .ch2-cover-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 5rem;
+      font-weight: 700;
+      margin: 24px 0;
+      line-height: 1.1;
+      animation: titleGlow 1.2s ease-out both;
+    }
+    .ch2-cover-title .ct1 { color: var(--gold); text-shadow: 0 0 18px var(--gold-glow); }
+    .ch2-cover-title .ct2 { color: var(--cyan); text-shadow: 0 0 18px var(--cyan-glow); }
+    .ch2-cover-title .ct3 { color: var(--magenta); text-shadow: 0 0 18px var(--magenta-glow); }
+    .ch2-cover-sub {
+      font-size: 2.6rem;
+      font-weight: 600;
+      margin: 28px 0;
+      letter-spacing: 1px;
+    }
+    .ch2-cover-ch {
+      font-size: 2rem;
+      color: var(--gold);
+      margin: 12px 0 8px;
+    }
+    .ch2-cover-en {
+      font-size: 1.2rem;
+      color: var(--text-dim);
+      letter-spacing: 2px;
+    }
+    .ch2-cover-divider {
+      width: 120px;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--gold), transparent);
+      margin: 30px auto;
+      animation: slideIn .7s ease-out 1.2s both;
+    }
+
+    /* ===================== SLIDE 2: CHAPTER NAV ===================== */
+    .ch2-nav-layout {
+      display: grid;
+      grid-template-columns: 1fr 1.3fr;
+      gap: 60px;
+      width: 100%;
+      max-width: 1500px;
+      text-align: left;
+      align-items: start;
+    }
+    .ch2-nav-side {
+      background: var(--dark-card);
+      border: 1px solid rgba(255,255,255,.06);
+      border-radius: 18px;
+      padding: 44px 40px;
+      transition: border-color .3s, transform .3s;
+    }
+    .ch2-nav-side:hover { transform: translateY(-4px); }
+    .ch2-nav-side.nav-left { border-top: 3px solid var(--purple); }
+    .ch2-nav-side.nav-right {
+      border-top: 3px solid var(--gold);
+      box-shadow: 0 0 30px rgba(255,215,0,.06);
+      background: linear-gradient(135deg, rgba(255,215,0,.06) 0%, var(--dark-card) 60%);
+    }
+    .ch2-nav-side .cn-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .95rem;
+      letter-spacing: 2px;
+      margin-bottom: 16px;
+    }
+    .ch2-nav-side.nav-left .cn-label { color: var(--purple); }
+    .ch2-nav-side.nav-right .cn-label { color: var(--gold); }
+    .ch2-nav-side .cn-title {
+      font-size: 2.8rem;
+      font-weight: 700;
+      margin-bottom: 24px;
+    }
+    .ch2-nav-side.nav-left .cn-title { color: var(--text); }
+    .ch2-nav-side.nav-right .cn-title { color: var(--gold); }
+    .ch2-nav-side .cn-list { display: flex; flex-direction: column; gap: 14px; margin-bottom: 20px; }
+    .ch2-nav-side .cn-item {
+      font-size: 1.3rem;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .ch2-nav-side .cn-item .ci-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .ch2-nav-side.nav-left .ci-dot { background: var(--purple); }
+    .ch2-nav-side.nav-right .ci-dot { background: var(--gold); }
+    .ch2-nav-side .cn-sub {
+      font-size: 1.35rem;
+      color: var(--text-dim);
+      margin-bottom: 8px;
+    }
+    .ch2-nav-side .cn-foot {
+      font-size: 1rem;
+      color: var(--text-dim);
+      opacity: .6;
+      font-style: italic;
+    }
+    .ch2-nav-side .cn-code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.15rem;
+      color: var(--gold);
+      background: rgba(255,215,0,.08);
+      border-radius: 8px;
+      padding: 2px 10px;
+      display: inline;
+    }
+
+    /* ===================== SLIDE 3: STORY ===================== */
+    .story-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 60px;
+      width: 100%;
+      max-width: 1500px;
+      text-align: left;
+      align-items: start;
+    }
+    .story-left .sl-big {
+      font-size: 4.2rem;
+      font-weight: 700;
+      margin-bottom: 14px;
+      line-height: 1.15;
+    }
+    .story-left .sl-tag {
+      display: inline-block;
+      background: rgba(255,215,0,.12);
+      border: 1px solid rgba(255,215,0,.3);
+      border-radius: 10px;
+      padding: 6px 18px;
+      font-size: 1rem;
+      letter-spacing: 2px;
+      color: var(--gold);
+      margin-bottom: 20px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .story-quote {
+      background: rgba(255,255,255,.04);
+      border-left: 3px solid var(--gold);
+      border-radius: 0 12px 12px 0;
+      padding: 28px 32px 28px 48px;
+      font-size: 1.3rem;
+      line-height: 1.7;
+      color: var(--text-dim);
+      font-style: italic;
+      position: relative;
+    }
+    .story-quote::before {
+      content: "\201C";
+      position: absolute;
+      top: 10px; left: 16px;
+      font-size: 4rem;
+      color: var(--gold);
+      opacity: .3;
+      font-family: Georgia, serif;
+      line-height: 1;
+    }
+    .story-quote em { color: var(--gold); font-style: normal; font-weight: 600; }
+    .story-quote .sq-author {
+      font-size: 1rem;
+      color: var(--text-dim);
+      opacity: .6;
+      margin-top: 10px;
+      font-style: normal;
+    }
+    .story-right { display: flex; flex-direction: column; gap: 22px; }
+    .story-card {
+      background: var(--dark-card);
+      border: 1px solid rgba(255,255,255,.06);
+      border-radius: 14px;
+      padding: 30px 30px;
+      transition: border-color .3s, transform .3s;
+    }
+    .story-card:hover { transform: translateX(6px); }
+    .story-card.sc-red   { border-left: 4px solid var(--red); }
+    .story-card.sc-gold  { border-left: 4px solid var(--gold); }
+    .story-card.sc-red:hover  { border-color: var(--red); }
+    .story-card.sc-gold:hover { border-color: var(--gold); }
+    .story-card .sc-head {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+    .story-card .sc-icon { font-size: 1.5rem; flex-shrink: 0; }
+    .story-card .sc-name { font-size: 1.5rem; font-weight: 700; }
+    .story-card.sc-red  .sc-name { color: var(--red); }
+    .story-card.sc-gold .sc-name { color: var(--gold); }
+    .story-card .sc-desc {
+      font-size: 1.15rem;
+      color: var(--text-dim);
+      line-height: 1.6;
+      padding-left: 20px;
+    }
+    .story-card .sc-desc strong { color: var(--red); }
+
+    /* ===================== SLIDE 4: ROOT CAUSE ===================== */
+    .root-layout {
+      text-align: center;
+      max-width: 1200px;
+    }
+    .root-title {
+      font-size: 3.4rem;
+      font-weight: 700;
+      line-height: 1.3;
+      margin-bottom: 36px;
+    }
+    .root-title .rt-highlight {
+      background: linear-gradient(90deg, var(--gold), #FF8C00);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .root-box {
+      background: var(--dark-card);
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 16px;
+      padding: 36px 48px;
+      margin-bottom: 36px;
+      text-align: left;
+    }
+    .root-box .rb-line1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--gold);
+      margin-bottom: 12px;
+    }
+    .root-box .rb-line2 {
+      font-size: 1.35rem;
+      color: var(--text-dim);
+      line-height: 1.6;
+    }
+    .root-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      background: rgba(255,77,77,.15);
+      border: 1px solid rgba(255,77,77,.4);
+      border-radius: 12px;
+      padding: 18px 36px;
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--red);
+    }
+    .root-badge .rb-icon { font-size: 1.4rem; }
+
+    /* ===================== SLIDE 5: CONVENTION COMPARISON ===================== */
+    .conv-layout {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 50px;
+      width: 100%;
+      max-width: 1500px;
+      align-items: start;
+      text-align: left;
+    }
+    .conv-side {
+      background: var(--dark-card);
+      border: 1px solid rgba(255,255,255,.06);
+      border-radius: 18px;
+      padding: 44px 40px;
+    }
+    .conv-side.conv-left { border-color: rgba(0,243,255,.15); }
+    .conv-side.conv-right { border-color: rgba(255,215,0,.2); box-shadow: 0 0 30px rgba(255,215,0,.06); }
+    .conv-side .cs-label {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1rem;
+      letter-spacing: 2px;
+      margin-bottom: 8px;
+    }
+    .conv-side.conv-left .cs-label { color: var(--cyan); }
+    .conv-side.conv-right .cs-label { color: var(--gold); }
+    .conv-side .cs-sub {
+      font-size: 1.1rem;
+      color: var(--text-dim);
+      font-style: italic;
+      margin-bottom: 22px;
+    }
+    .conv-side .cs-title {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 20px;
+    }
+    .conv-side.conv-left .cs-title { color: var(--cyan); }
+    .conv-side.conv-right .cs-title { color: var(--gold); }
+    .conv-side .cs-list {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+    .conv-side .cs-item {
+      font-size: 1.25rem;
+      line-height: 1.5;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .conv-side .cs-item .ci-arrow {
+      font-size: .95rem;
+      flex-shrink: 0;
+      width: 24px;
+      text-align: center;
+    }
+    .conv-side.conv-left .cs-item { color: var(--text); }
+    .conv-side.conv-right .cs-item { color: var(--text); }
+    .conv-side.conv-left .ci-arrow { color: var(--cyan); }
+    .conv-side.conv-right .ci-arrow { color: var(--gold); }
+    .conv-side .cs-note {
+      font-size: 1.1rem;
+      padding: 14px 18px;
+      border-radius: 10px;
+    }
+    .conv-side.conv-left .cs-note {
+      color: var(--text-dim);
+      background: rgba(0,243,255,.06);
+    }
+    .conv-side.conv-right .cs-note {
+      color: var(--text-dim);
+    }
+    .conv-arrow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding-top: 120px;
+      font-size: 3.5rem;
+      color: var(--cyan);
+      text-shadow: 0 0 20px var(--cyan-glow);
+      animation: arrowPulse 2s infinite;
+    }
+    .conv-verdict {
+      text-align: center;
+      margin-top: 28px;
+      font-size: 1.4rem;
+      font-weight: 700;
+    }
+    .conv-verdict .cv-red { color: var(--red); }
+    .conv-verdict .cv-gold { color: var(--gold); }
+
+    /* ===================== SLIDE 6: SOLUTION ===================== */
+    .solution-layout {
+      text-align: center;
+      max-width: 1500px;
+      width: 100%;
+    }
+    .solution-head { margin-bottom: 40px; }
+    .solution-head .sh-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .95rem;
+      letter-spacing: 3px;
+      color: var(--cyan);
+      margin-bottom: 20px;
+    }
+    .solution-head .sh-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 5rem;
+      font-weight: 700;
+      color: var(--gold);
+      text-shadow: 0 0 24px var(--gold-glow);
+      margin-bottom: 12px;
+    }
+    .solution-head .sh-sub {
+      font-size: 1.5rem;
+      color: var(--text-dim);
+    }
+    .solution-cards {
+      display: flex;
+      justify-content: center;
+      gap: 32px;
+      margin-bottom: 44px;
+    }
+    .solution-card {
+      background: var(--dark-card);
+      border: 1px solid rgba(255,255,255,.06);
+      border-radius: 16px;
+      padding: 36px 32px;
+      width: 320px;
+      text-align: left;
+      transition: border-color .3s, transform .3s;
+    }
+    .solution-card:hover { transform: translateY(-4px); }
+    .solution-card:nth-child(1) { border-top: 3px solid var(--gold); }
+    .solution-card:nth-child(1):hover { border-color: var(--gold); }
+    .solution-card:nth-child(2) { border-top: 3px solid var(--cyan); }
+    .solution-card:nth-child(2):hover { border-color: var(--cyan); }
+    .solution-card:nth-child(3) { border-top: 3px solid var(--purple); }
+    .solution-card:nth-child(3):hover { border-color: var(--purple); }
+    .solution-card .sc-icon { font-size: 1.6rem; margin-bottom: 10px; }
+    .solution-card .sc-name { font-size: 1.4rem; font-weight: 700; margin-bottom: 10px; }
+    .solution-card:nth-child(1) .sc-name { color: var(--gold); }
+    .solution-card:nth-child(2) .sc-name { color: var(--cyan); }
+    .solution-card:nth-child(3) .sc-name { color: var(--purple); }
+    .solution-card .sc-desc {
+      font-size: 1.1rem;
+      color: var(--text-dim);
+      line-height: 1.6;
+    }
+    .solution-chain {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      background: rgba(255,255,255,.03);
+      border: 1px solid rgba(255,255,255,.06);
+      border-radius: 12px;
+      padding: 20px 36px;
+      font-size: 1.15rem;
+      color: var(--text-dim);
+      letter-spacing: 1px;
+    }
+    .solution-chain .sc-arrow { color: var(--cyan); font-weight: 700; }
+
+    /* ===================== SLIDE 7: CONFIG EVOLUTION ===================== */
+    .cfg-layout {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 50px;
+      width: 100%;
+      max-width: 1500px;
+      align-items: start;
+      text-align: left;
+    }
+    .cfg-side {
+      background: var(--dark-card);
+      border: 1px solid rgba(255,255,255,.06);
+      border-radius: 18px;
+      padding: 44px 40px;
+    }
+    .cfg-side.cfg-left { border-color: rgba(0,243,255,.15); }
+    .cfg-side.cfg-right { border-color: rgba(255,215,0,.2); box-shadow: 0 0 30px rgba(255,215,0,.06); }
+    .cfg-side .cg-title {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 22px;
+    }
+    .cfg-side.cfg-left .cg-title { color: var(--cyan); }
+    .cfg-side.cfg-right .cg-title { color: var(--gold); }
+    .cfg-side .cg-list {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      margin-bottom: 22px;
+    }
+    .cfg-side .cg-item {
+      font-size: 1.2rem;
+      line-height: 1.5;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      color: var(--text);
+    }
+    .cfg-side .cg-item .cg-file {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.05rem;
+      color: var(--cyan);
+      background: rgba(0,243,255,.08);
+      border-radius: 6px;
+      padding: 2px 8px;
+      white-space: nowrap;
+    }
+    .cfg-side.cfg-right .cg-item .cg-file {
+      color: var(--gold);
+      background: rgba(255,215,0,.08);
+    }
+    .cfg-side .cg-note {
+      font-size: 1.15rem;
+      color: var(--text-dim);
+      line-height: 1.6;
+      padding: 16px 20px;
+      border-radius: 10px;
+      margin-bottom: 14px;
+    }
+    .cfg-side.cfg-left .cg-note {
+      background: rgba(0,243,255,.06);
+    }
+    .cfg-side.cfg-right .cg-note {
+      background: rgba(255,215,0,.06);
+    }
+    .cfg-side .cg-note strong { color: var(--gold); }
+    .cfg-side .cg-reader {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .9rem;
+      color: var(--text-dim);
+      opacity: .6;
+      font-style: italic;
+    }
+    .cfg-side .cg-check {
+      font-size: 1.2rem;
+      color: var(--green);
+      margin-bottom: 14px;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    .cfg-side .cg-bullets {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .cfg-side .cg-bullet {
+      font-size: 1.15rem;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .cfg-side .cg-bullet .cb-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      background: var(--gold);
+    }
+    .cfg-arrow {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding-top: 120px;
+    }
+    .cfg-arrow .ca-label {
+      font-family: 'JetBrains Mono', monospace;
+      letter-spacing: 2px;
+      color: var(--gold);
+      text-align: center;
+      line-height: 1.4;
+    }
+    .cfg-arrow .ca-icon {
+      font-size: 3.5rem;
+      color: var(--cyan);
+      text-shadow: 0 0 20px var(--cyan-glow);
+      animation: arrowPulse 2s infinite;
+    }
+
+    /* ===================== SLIDE 8: FIVE LAYERS ===================== */
+    .layers-layout {
+      text-align: center;
+      max-width: 1100px;
+      width: 100%;
+    }
+    .layers-title {
+      font-size: 2.8rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .layers-sub {
+      font-size: 1.2rem;
+      color: var(--text-dim);
+      font-style: italic;
+      margin-bottom: 36px;
+    }
+    .layers-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .layer-item {
+      display: grid;
+      grid-template-columns: 60px 1fr auto;
+      gap: 24px;
+      align-items: center;
+      background: var(--dark-card);
+      border: 1px solid rgba(255,255,255,.06);
+      border-radius: 14px;
+      padding: 24px 32px;
+      text-align: left;
+      transition: border-color .3s, transform .3s;
+    }
+    .layer-item:hover { transform: translateX(6px); }
+    .layer-item .li-num {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.6rem;
+      font-weight: 700;
+      text-align: center;
+    }
+    .layer-item .li-main { display: flex; align-items: center; gap: 14px; }
+    .layer-item .li-name {
+      font-size: 1.4rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .layer-item .li-sep {
+      font-size: 1.1rem;
+      color: var(--text-dim);
+    }
+    .layer-item .li-doc {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.1rem;
+      color: var(--text);
+    }
+    .layer-item .li-desc {
+      font-size: 1.05rem;
+      color: var(--text-dim);
+      text-align: right;
+      white-space: nowrap;
+    }
+    .layer-item .li-badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .75rem;
+      letter-spacing: 1px;
+      padding: 4px 12px;
+      border-radius: 6px;
+      font-weight: 500;
+      margin-left: 10px;
+    }
+    /* Color coding per layer */
+    .layer-item:nth-child(1) { border-left: 4px solid var(--purple); }
+    .layer-item:nth-child(1) .li-num { color: var(--purple); }
+    .layer-item:nth-child(1) .li-name { color: var(--purple); }
+    .layer-item:nth-child(1):hover { border-color: var(--purple); }
+    .layer-item:nth-child(2) { border-left: 4px solid var(--cyan); }
+    .layer-item:nth-child(2) .li-num { color: var(--cyan); }
+    .layer-item:nth-child(2) .li-name { color: var(--cyan); }
+    .layer-item:nth-child(2):hover { border-color: var(--cyan); }
+    .layer-item:nth-child(3) { border-left: 4px solid var(--gold); }
+    .layer-item:nth-child(3) .li-num { color: var(--gold); }
+    .layer-item:nth-child(3) .li-name { color: var(--gold); }
+    .layer-item:nth-child(3):hover { border-color: var(--gold); }
+    .layer-item:nth-child(4) { border-left: 4px solid #FF8C00; }
+    .layer-item:nth-child(4) .li-num { color: #FF8C00; }
+    .layer-item:nth-child(4) .li-name { color: #FF8C00; }
+    .layer-item:nth-child(4):hover { border-color: #FF8C00; }
+    .layer-item:nth-child(5) { border-left: 4px solid var(--red); }
+    .layer-item:nth-child(5) .li-num { color: var(--red); }
+    .layer-item:nth-child(5) .li-name { color: var(--red); }
+    .layer-item:nth-child(5):hover { border-color: var(--red); }
+    .layer-badge {
+      background: rgba(255,215,0,.15);
+      color: var(--gold);
+      border: 1px solid rgba(255,215,0,.3);
+    }
+
+    /* ===================== SLIDE 9: FIVE LAYERS TABLE ===================== */
+    .table-layout {
+      text-align: center;
+      max-width: 1500px;
+      width: 100%;
+    }
+    .table-title {
+      font-size: 2.4rem;
+      font-weight: 700;
+      margin-bottom: 32px;
+    }
+    .layers-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0 8px;
+    }
+    .layers-table th {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .9rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      text-align: center;
+      padding: 10px 20px;
+      border-bottom: 1px solid rgba(255,255,255,.1);
+    }
+    .layers-table td {
+      padding: 18px 20px;
+      font-size: 1.15rem;
+      background: var(--dark-card);
+      border-top: 1px solid rgba(255,255,255,.04);
+      border-bottom: 1px solid rgba(255,255,255,.04);
+    }
+    .layers-table tr td:first-child {
+      border-left: 4px solid var(--cyan);
+      border-radius: 10px 0 0 10px;
+    }
+    .layers-table tr td:last-child {
+      border-radius: 0 10px 10px 0;
+    }
+    .layers-table .lt-level {
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .layers-table .lt-path {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1rem;
+      color: var(--cyan);
+    }
+    .layers-table .lt-note {
+      font-size: 1rem;
+      color: var(--text-dim);
+      margin-top: 20px;
+      font-style: italic;
+    }
+    .layers-table .lt-badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .75rem;
+      letter-spacing: 1px;
+      padding: 3px 10px;
+      border-radius: 6px;
+      font-weight: 500;
+    }
+    /* Row highlights */
+    .layers-table tr.row-purple td:first-child { border-left-color: var(--purple); }
+    .layers-table tr.row-purple .lt-level { color: var(--purple); }
+    .layers-table tr.row-cyan td:first-child { border-left-color: var(--cyan); }
+    .layers-table tr.row-cyan .lt-level { color: var(--cyan); }
+    .layers-table tr.row-gold td:first-child { border-left-color: var(--gold); }
+    .layers-table tr.row-gold .lt-level { color: var(--gold); }
+    .layers-table tr.row-gold { position: relative; }
+    .layers-table tr.row-orange td:first-child { border-left-color: #FF8C00; }
+    .layers-table tr.row-orange .lt-level { color: #FF8C00; }
+    .layers-table tr.row-red td:first-child { border-left-color: var(--red); }
+    .layers-table tr.row-red .lt-level { color: var(--red); }
+
+    /* ===================== SLIDE 10: ENTERPRISE & USER LEVEL ===================== */
+    .duo-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 50px;
+      width: 100%;
+      max-width: 1500px;
+      align-items: start;
+      text-align: left;
+    }
+    .duo-side {
+      background: var(--dark-card);
+      border: 1px solid rgba(255,255,255,.06);
+      border-radius: 18px;
+      padding: 44px 40px;
+    }
+    .duo-side.duo-left { border-top: 3px solid var(--purple); }
+    .duo-side.duo-right { border-top: 3px solid var(--cyan); }
+    .duo-side .ds-num {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .9rem;
+      letter-spacing: 2px;
+      margin-bottom: 10px;
+    }
+    .duo-side.duo-left .ds-num { color: var(--purple); }
+    .duo-side.duo-right .ds-num { color: var(--cyan); }
+    .duo-side .ds-title {
+      font-size: 2.2rem;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .duo-side.duo-left .ds-title { color: var(--purple); }
+    .duo-side.duo-right .ds-title { color: var(--cyan); }
+    .duo-side .ds-sub {
+      font-size: 1.25rem;
+      color: var(--text-dim);
+      margin-bottom: 24px;
+    }
+    .duo-side .ds-label {
+      font-size: 1.05rem;
+      color: var(--text-dim);
+      margin-bottom: 14px;
+    }
+    .duo-side .ds-list {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      margin-bottom: 22px;
+    }
+    .duo-side .ds-item {
+      font-size: 1.2rem;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .duo-side .ds-item .di-icon { font-size: 1.1rem; flex-shrink: 0; }
+    .duo-side.duo-left .ds-item { color: var(--text); }
+    .duo-side.duo-right .ds-item { color: var(--text); }
+    .duo-side.duo-right .ds-sub-item {
+      font-size: 1.05rem;
+      color: var(--text-dim);
+      padding-left: 28px;
+      margin-top: -6px;
+      margin-bottom: 6px;
+    }
+    .duo-side .ds-foot {
+      font-size: 1.1rem;
+      color: var(--text-dim);
+      padding: 16px 20px;
+      border-radius: 10px;
+      line-height: 1.6;
+    }
+    .duo-side.duo-left .ds-foot {
+      background: rgba(180,130,255,.06);
+    }
+    .duo-side.duo-right .ds-foot {
+      background: rgba(0,243,255,.06);
+    }
+
+    /* ===================== SHARED: SLIDES 11-25 ===================== */
+    .s-title-bar {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .9rem;
+      letter-spacing: 2px;
+      margin-bottom: 6px;
+    }
+    .s-big-title {
+      font-size: 2.6rem;
+      font-weight: 700;
+      color: white;
+      margin-bottom: 28px;
+    }
+    /* Duo layout v2 — extended from slide 10 */
+    .duo-v2 { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; width: 100%; max-width: 1500px; text-align: left; align-items: start; }
+    .duo-v2 .d-side { background: var(--dark-card); border: 1px solid rgba(255,255,255,.06); border-radius: 18px; padding: 36px 36px; }
+    .duo-v2 .d-side .d-tag { font-family: 'JetBrains Mono', monospace; font-size: .85rem; letter-spacing: 2px; padding: 4px 14px; border-radius: 8px; display: inline-block; margin-bottom: 12px; }
+    .duo-v2 .d-side .d-name { font-size: 2rem; font-weight: 700; margin-bottom: 6px; }
+    .duo-v2 .d-side .d-path { font-family: 'JetBrains Mono', monospace; font-size: 1.05rem; padding: 8px 14px; border-radius: 8px; display: inline-block; margin-bottom: 18px; }
+    .duo-v2 .d-side .d-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 18px; }
+    .duo-v2 .d-side .d-item { font-size: 1.15rem; color: var(--text); display: flex; align-items: flex-start; gap: 10px; }
+    .duo-v2 .d-side .d-item .di-icon { flex-shrink: 0; font-size: 1.1rem; }
+    .duo-v2 .d-side .d-sub { font-size: 1rem; color: var(--text-dim); padding-left: 28px; margin-top: -4px; margin-bottom: 4px; }
+    .duo-v2 .d-side .d-foot { font-size: 1.05rem; color: var(--text-dim); padding: 14px 18px; border-radius: 10px; line-height: 1.6; }
+    /* Color variants */
+    .d-gold .d-tag { background: rgba(255,215,0,.12); color: var(--gold); }
+    .d-gold .d-name { color: var(--gold); }
+    .d-gold .d-path { background: rgba(255,215,0,.08); color: var(--gold); }
+    .d-gold .d-foot { background: rgba(255,215,0,.06); }
+    .d-gold { border-top: 3px solid var(--gold); }
+    .d-orange .d-tag { background: rgba(255,140,0,.12); color: #FF8C00; }
+    .d-orange .d-name { color: #FF8C00; }
+    .d-orange .d-path { background: rgba(255,140,0,.08); color: #FF8C00; }
+    .d-orange .d-foot { background: rgba(255,140,0,.06); }
+    .d-orange { border-top: 3px solid #FF8C00; }
+    .d-red .d-tag { background: rgba(255,77,77,.12); color: var(--red); }
+    .d-red .d-name { color: var(--red); }
+    .d-red .d-path { background: rgba(255,77,77,.08); color: var(--red); }
+    .d-red .d-foot { background: rgba(255,77,77,.06); }
+    .d-red { border-top: 3px solid var(--red); }
+    .d-purple .d-tag { background: rgba(180,130,255,.12); color: var(--purple); }
+    .d-purple .d-name { color: var(--purple); }
+    .d-purple .d-path { background: rgba(180,130,255,.08); color: var(--purple); }
+    .d-purple .d-foot { background: rgba(180,130,255,.06); }
+    .d-purple { border-top: 3px solid var(--purple); }
+    .d-green .d-tag { background: rgba(0,200,120,.12); color: var(--green); }
+    .d-green .d-name { color: var(--green); }
+    .d-green .d-path { background: rgba(0,200,120,.08); color: var(--green); }
+    .d-green .d-foot { background: rgba(0,200,120,.06); }
+    .d-green { border-top: 3px solid var(--green); }
+    .d-cyan .d-tag { background: rgba(0,243,255,.12); color: var(--cyan); }
+    .d-cyan .d-name { color: var(--cyan); }
+    .d-cyan .d-path { background: rgba(0,243,255,.08); color: var(--cyan); }
+    .d-cyan .d-foot { background: rgba(0,243,255,.06); }
+    .d-cyan { border-top: 3px solid var(--cyan); }
+    /* Three-column card grid */
+    .tri-grid { display: flex; justify-content: center; gap: 28px; width: 100%; max-width: 1500px; }
+    .tri-grid .tri-card { background: var(--dark-card); border: 1px solid rgba(255,255,255,.06); border-radius: 16px; padding: 32px 28px; flex: 1; max-width: 420px; text-align: left; transition: border-color .3s, transform .3s; }
+    .tri-grid .tri-card:hover { transform: translateY(-4px); }
+    .tri-grid .tri-card:nth-child(1) { border-top: 3px solid var(--cyan); }
+    .tri-grid .tri-card:nth-child(1):hover { border-color: var(--cyan); }
+    .tri-grid .tri-card:nth-child(2) { border-top: 3px solid var(--gold); }
+    .tri-grid .tri-card:nth-child(2):hover { border-color: var(--gold); }
+    .tri-grid .tri-card:nth-child(3) { border-top: 3px solid var(--green); }
+    .tri-grid .tri-card:nth-child(3):hover { border-color: var(--green); }
+    .tri-grid .tri-card .tc-head { font-size: 1.3rem; font-weight: 700; margin-bottom: 6px; }
+    .tri-grid .tri-card:nth-child(1) .tc-head { color: var(--cyan); }
+    .tri-grid .tri-card:nth-child(2) .tc-head { color: var(--gold); }
+    .tri-grid .tri-card:nth-child(3) .tc-head { color: var(--green); }
+    .tri-grid .tri-card .tc-sub { font-size: 1rem; color: var(--text-dim); margin-bottom: 14px; }
+    .tri-grid .tri-card .tc-body { font-size: 1.05rem; color: var(--text); line-height: 1.65; }
+    .tri-grid .tri-card .tc-body code { font-family: 'JetBrains Mono', monospace; font-size: .95rem; background: rgba(255,255,255,.06); border-radius: 4px; padding: 2px 6px; }
+    .tri-grid .tri-card .tc-example { font-size: .95rem; color: var(--text-dim); background: rgba(255,255,255,.03); border-radius: 8px; padding: 12px 14px; margin-top: 12px; line-height: 1.6; }
+    .tri-grid .tri-card .tc-example code { font-family: 'JetBrains Mono', monospace; font-size: .9rem; color: var(--cyan); background: rgba(0,243,255,.08); border-radius: 4px; padding: 1px 5px; }
+    /* Code block card */
+    .code-block { font-family: 'JetBrains Mono', monospace; font-size: .9rem; background: rgba(0,0,0,.4); border: 1px solid rgba(255,255,255,.08); border-radius: 10px; padding: 18px 22px; line-height: 1.7; color: var(--cyan); margin-top: 12px; }
+    .code-block .cb-comment { color: var(--text-dim); }
+    .code-block .cb-key { color: var(--gold); }
+    .code-block .cb-val { color: var(--text); }
+    /* Comparison layout (left-red right-green) */
+    .cmp-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; width: 100%; max-width: 1500px; text-align: left; align-items: start; }
+    .cmp-side { background: var(--dark-card); border: 1px solid rgba(255,255,255,.06); border-radius: 18px; padding: 36px 36px; }
+    .cmp-side.cmp-bad { border-top: 3px solid var(--red); }
+    .cmp-side.cmp-good { border-top: 3px solid var(--green); }
+    .cmp-side .cm-icon { font-size: 1.6rem; margin-bottom: 10px; }
+    .cmp-side .cm-title { font-size: 1.6rem; font-weight: 700; margin-bottom: 16px; }
+    .cmp-side.cmp-bad .cm-title { color: var(--red); }
+    .cmp-side.cmp-good .cm-title { color: var(--green); }
+    .cmp-side .cm-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+    .cmp-side .cm-item { font-size: 1.1rem; color: var(--text-dim); display: flex; align-items: flex-start; gap: 8px; }
+    .cmp-side .cm-q { font-size: 1.05rem; color: var(--text-dim); padding: 12px 16px; border-radius: 8px; margin-top: 8px; }
+    .cmp-side.cmp-bad .cm-q { background: rgba(255,77,77,.06); }
+    .cmp-side.cmp-good .cm-q { background: rgba(0,200,120,.06); }
+    .cmp-side .cm-tech { font-family: 'JetBrains Mono', monospace; font-size: 1rem; color: var(--cyan); background: rgba(0,243,255,.08); border-radius: 6px; padding: 6px 12px; display: inline-block; margin-bottom: 12px; }
+    .cmp-side .cm-cmds { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+    .cmp-side .cm-cmd { font-family: 'JetBrains Mono', monospace; font-size: .95rem; color: var(--text-dim); display: flex; align-items: center; gap: 8px; }
+    .cmp-side .cm-cmd code { color: var(--cyan); background: rgba(0,243,255,.08); border-radius: 4px; padding: 2px 6px; }
+    .cmp-side .cm-cmd .cc-arrow { color: var(--text-dim); opacity: .5; }
+    /* Flow chain (reused) */
+    .flow-chain { display: flex; align-items: center; justify-content: center; gap: 8px; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.06); border-radius: 12px; padding: 16px 28px; font-size: 1.05rem; color: var(--text-dim); letter-spacing: 1px; margin-top: 20px; }
+    .flow-chain .fc-arrow { color: var(--cyan); font-weight: 700; }
+    .flow-chain code { font-family: 'JetBrains Mono', monospace; font-size: .95rem; color: var(--cyan); background: rgba(0,243,255,.08); border-radius: 4px; padding: 2px 6px; }
+    /* Golden rule box */
+    .golden-rule { border: 2px solid rgba(255,215,0,.3); border-radius: 16px; padding: 32px 40px; margin-bottom: 36px; text-align: center; background: rgba(255,215,0,.04); max-width: 1200px; }
+    .golden-rule .gr-icon { font-size: 2rem; margin-bottom: 10px; }
+    .golden-rule .gr-text { font-size: 1.35rem; line-height: 1.7; color: var(--gold); font-style: italic; }
+    .golden-rule .gr-sub { font-size: 1rem; color: var(--text-dim); margin-top: 10px; }
+    /* Three eval cards */
+    .eval-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; width: 100%; max-width: 1300px; }
+    .eval-card { background: var(--dark-card); border: 1px solid rgba(255,255,255,.06); border-radius: 14px; padding: 28px 24px; text-align: left; transition: border-color .3s, transform .3s; }
+    .eval-card:hover { transform: translateY(-4px); }
+    .eval-card:nth-child(1) { border-top: 3px solid var(--cyan); }
+    .eval-card:nth-child(1):hover { border-color: var(--cyan); }
+    .eval-card:nth-child(2) { border-top: 3px solid var(--purple); }
+    .eval-card:nth-child(2):hover { border-color: var(--purple); }
+    .eval-card:nth-child(3) { border-top: 3px solid var(--red); }
+    .eval-card:nth-child(3):hover { border-color: var(--red); }
+    .eval-card .ev-icon { font-size: 1.5rem; margin-bottom: 8px; }
+    .eval-card .ev-name { font-size: 1.2rem; font-weight: 700; margin-bottom: 6px; }
+    .eval-card:nth-child(1) .ev-name { color: var(--cyan); }
+    .eval-card:nth-child(2) .ev-name { color: var(--purple); }
+    .eval-card:nth-child(3) .ev-name { color: var(--red); }
+    .eval-card .ev-desc { font-size: 1rem; color: var(--text-dim); line-height: 1.6; }
+    /* Summary layout */
+    .summary-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 50px; width: 100%; max-width: 1500px; text-align: left; align-items: start; }
+    .summary-left .sl-list { display: flex; flex-direction: column; gap: 24px; }
+    .summary-left .sl-item { display: flex; gap: 16px; }
+    .summary-left .sl-num { font-family: 'Orbitron', sans-serif; font-size: 1.6rem; font-weight: 700; flex-shrink: 0; width: 40px; }
+    .summary-left .sl-item:nth-child(1) .sl-num { color: var(--gold); }
+    .summary-left .sl-item:nth-child(2) .sl-num { color: var(--cyan); }
+    .summary-left .sl-item:nth-child(3) .sl-num { color: var(--magenta); }
+    .summary-left .sl-content .slc-title { font-size: 1.3rem; font-weight: 700; margin-bottom: 6px; }
+    .summary-left .sl-content .slc-desc { font-size: 1.05rem; color: var(--text-dim); line-height: 1.6; }
+    .summary-right .sr-table { width: 100%; }
+    .summary-right .sr-row { display: flex; align-items: center; gap: 14px; padding: 14px 0; border-bottom: 1px solid rgba(255,255,255,.04); }
+    .summary-right .sr-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .summary-right .sr-name { font-size: 1.15rem; font-weight: 600; min-width: 70px; }
+    .summary-right .sr-desc { font-size: 1.05rem; color: var(--text-dim); }
+    /* Next chapter preview */
+    .next-preview { text-align: center; max-width: 900px; }
+    .next-preview .np-card { background: var(--dark-card); border: 1px solid rgba(180,130,255,.2); border-radius: 20px; padding: 48px 56px; display: inline-block; text-align: left; }
+    .next-preview .np-tag { font-family: 'JetBrains Mono', monospace; font-size: .85rem; letter-spacing: 3px; color: var(--text-dim); margin-bottom: 14px; }
+    .next-preview .np-title { font-size: 2.4rem; font-weight: 700; color: white; margin-bottom: 8px; }
+    .next-preview .np-sub { font-size: 1.15rem; color: var(--text-dim); margin-bottom: 24px; }
+    .next-preview .np-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 28px; }
+    .next-preview .np-item { font-size: 1.15rem; color: var(--text); display: flex; align-items: center; gap: 10px; }
+    .next-preview .np-item .ni-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--purple); flex-shrink: 0; }
+    .next-preview .np-cta { font-size: 1.1rem; color: var(--green); font-weight: 600; }
+    .next-preview .np-arrow { font-size: 3rem; color: var(--purple); margin-top: 24px; animation: arrowPulse 2s infinite; }
+    /* Problem-solution layout (slide 17) */
+    .ps-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; width: 100%; max-width: 1500px; text-align: left; align-items: start; }
+    .ps-side { background: var(--dark-card); border: 1px solid rgba(255,255,255,.06); border-radius: 18px; padding: 36px 36px; }
+    .ps-side.ps-problem { border-top: 3px solid var(--red); }
+    .ps-side.ps-solution { border-top: 3px solid var(--green); }
+    .ps-side .ps-icon { font-size: 1.6rem; margin-bottom: 10px; }
+    .ps-side .ps-title { font-size: 1.6rem; font-weight: 700; margin-bottom: 16px; }
+    .ps-side.ps-problem .ps-title { color: var(--red); }
+    .ps-side.ps-solution .ps-title { color: var(--green); }
+    .ps-side .ps-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
+    .ps-side .ps-item { font-size: 1.15rem; color: var(--text-dim); display: flex; align-items: flex-start; gap: 10px; }
+    .ps-side .ps-item .pi-num { font-family: 'Orbitron', sans-serif; font-size: 1rem; font-weight: 700; flex-shrink: 0; width: 24px; }
+    .ps-side.ps-problem .pi-num { color: var(--red); }
+    .ps-side .ps-modules { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+    .ps-side .ps-mod { font-family: 'JetBrains Mono', monospace; font-size: .95rem; padding: 6px 14px; border-radius: 8px; }
+    .ps-side .ps-mod:nth-child(1) { background: rgba(0,243,255,.1); color: var(--cyan); }
+    .ps-side .ps-mod:nth-child(2) { background: rgba(0,200,120,.1); color: var(--green); }
+    .ps-side .ps-mod:nth-child(3) { background: rgba(255,140,0,.1); color: #FF8C00; }
+    .ps-side .ps-mod:nth-child(4) { background: rgba(255,77,77,.1); color: var(--red); }
+    .ps-side .ps-features { display: flex; flex-direction: column; gap: 12px; }
+    .ps-side .ps-feat { font-size: 1.1rem; color: var(--text); }
+    .ps-side .ps-feat .pf-label { font-weight: 700; margin-bottom: 2px; }
+    .ps-side .ps-feat .pf-desc { font-size: 1rem; color: var(--text-dim); }
+    /* Tech stack table (slide 20) */
+    .tech-table { width: 100%; border-collapse: separate; border-spacing: 0 6px; }
+    .tech-table td { padding: 10px 16px; font-size: 1.05rem; background: var(--dark-card); }
+    .tech-table tr td:first-child { border-radius: 8px 0 0 8px; font-weight: 600; color: var(--cyan); min-width: 60px; }
+    .tech-table tr td:last-child { border-radius: 0 8px 8px 0; color: var(--text); }
+    /* Decision tree (slide 20) */
+    .decision-tree { display: flex; flex-direction: column; gap: 14px; }
+    .dt-question { font-size: 1.2rem; font-weight: 700; color: var(--gold); margin-bottom: 6px; }
+    .dt-branch { background: var(--dark-card); border: 1px solid rgba(255,255,255,.06); border-radius: 12px; padding: 18px 20px; border-left: 4px solid; }
+    .dt-branch:nth-child(2) { border-left-color: var(--cyan); }
+    .dt-branch:nth-child(3) { border-left-color: var(--purple); }
+    .dt-branch:nth-child(4) { border-left-color: var(--green); }
+    .dt-branch .dt-label { font-size: 1.1rem; font-weight: 600; margin-bottom: 4px; }
+    .dt-branch:nth-child(2) .dt-label { color: var(--cyan); }
+    .dt-branch:nth-child(3) .dt-label { color: var(--purple); }
+    .dt-branch:nth-child(4) .dt-label { color: var(--green); }
+    .dt-branch .dt-arrow { font-family: 'JetBrains Mono', monospace; font-size: .95rem; color: var(--gold); margin-bottom: 4px; }
+    .dt-branch .dt-feature { font-size: .95rem; color: var(--text-dim); }
+    /* Layer stack (slide 21) */
+    .layer-stack { display: flex; flex-direction: column; gap: 10px; }
+    .ls-row { display: flex; align-items: center; gap: 16px; background: var(--dark-card); border: 1px solid rgba(255,255,255,.06); border-radius: 10px; padding: 16px 20px; transition: transform .3s; }
+    .ls-row:hover { transform: translateX(4px); }
+    .ls-row .ls-name { font-family: 'JetBrains Mono', monospace; font-size: 1.05rem; font-weight: 600; min-width: 120px; }
+    .ls-row .ls-arrow { color: var(--text-dim); font-size: 1.2rem; }
+    .ls-row .ls-desc { font-size: 1rem; color: var(--text-dim); }
+    .ls-row:nth-child(1) { border-left: 4px solid var(--cyan); }
+    .ls-row:nth-child(1) .ls-name { color: var(--cyan); }
+    .ls-row:nth-child(2) { border-left: 4px solid var(--purple); }
+    .ls-row:nth-child(2) .ls-name { color: var(--purple); }
+    .ls-row:nth-child(3) { border-left: 4px solid var(--green); }
+    .ls-row:nth-child(3) .ls-name { color: var(--green); }
+    .ls-row:nth-child(4) { border-left: 4px solid #8B6914; }
+    .ls-row:nth-child(4) .ls-name { color: #D4A843; }
+    /* Slide 23: Three-column card variants */
+    .tri-grid .tri-card:nth-child(1) { border-top-color: var(--cyan); }
+    .tri-grid .tri-card:nth-child(2) { border-top-color: var(--purple); }
+    .tri-grid .tri-card:nth-child(3) { border-top-color: var(--red); }
+    .tri-grid .tri-card:nth-child(1) .tc-head { color: var(--cyan); }
+    .tri-grid .tri-card:nth-child(2) .tc-head { color: var(--purple); }
+    .tri-grid .tri-card:nth-child(3) .tc-head { color: var(--red); }
+  </style>
+</head>
+<body>
+  <!-- SNOWFLAKES -->
+  <div id="snowfield"></div>
+
+  <!-- DECK -->
+  <div class="deck" id="deck">
+
+    <!-- ============ SLIDE 1: CHAPTER COVER ============ -->
+    <div class="slide active ch2-cover" data-idx="1">
+      <div class="cover-cone"></div>
+      <div class="ch2-cover-content">
+        <div class="tag anim-up">CHAPTER · 02</div>
+        <h1 class="ch2-cover-title">
+          <span class="ct1">Claude</span>
+          <span class="ct2">Code</span>
+          <span class="ct3">Harness</span>
+        </h1>
+        <div class="ch2-cover-sub anim-in d1">核心要点解析指南</div>
+        <div class="ch2-cover-divider"></div>
+        <div class="ch2-cover-ch anim-in d2">第 2 章：记忆系统工程实践</div>
+        <div class="ch2-cover-en anim-in d3">Memory System Engineering Practice</div>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 2: CHAPTER NAV ============ -->
+    <div class="slide" data-idx="2">
+      <div class="ch2-nav-layout">
+        <div class="ch2-nav-side nav-left anim-left d1">
+          <div class="cn-label">第一章回顾</div>
+          <div class="cn-title">上一章掌握的核心</div>
+          <div class="cn-list">
+            <div class="cn-item"><span class="ci-dot"></span>四层架构全景</div>
+            <div class="cn-item"><span class="ci-dot"></span>冰山隐喻</div>
+            <div class="cn-item"><span class="ci-dot"></span>Component 正交性</div>
+            <div class="cn-item"><span class="ci-dot"></span>Harness 公式</div>
+          </div>
+        </div>
+        <div class="ch2-nav-side nav-right anim-right d2">
+          <div class="cn-label">本章重点</div>
+          <div class="cn-title">记忆系统 · <span class="cn-code">CLAUD.md</span></div>
+          <div class="cn-sub">从零构建 AI 长期记忆</div>
+          <div class="cn-foot">AI 失忆症的根治方案</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 3: STORY ============ -->
+    <div class="slide" data-idx="3">
+      <div class="story-layout">
+        <div class="story-left anim-left d1">
+          <div class="sl-tag">[ 真实故事 ]</div>
+          <div class="sl-big">每次都要从头再说</div>
+          <div class="story-quote" style="margin-top:24px;">
+            "纠正了一次又一次，<br>
+            为什么每次都要从头说？"
+            <div class="sq-author">—— 萌新 · AI 开发工程师</div>
+          </div>
+        </div>
+        <div class="story-right">
+          <div class="story-card sc-red anim-right d2">
+            <div class="sc-head">
+              <span class="sc-icon">❌</span>
+              <span class="sc-name">框架选错</span>
+            </div>
+            <div class="sc-desc">期望：Fastify + TypeScript<br>实际：Express + JavaScript</div>
+          </div>
+          <div class="story-card sc-gold anim-right d3">
+            <div class="sc-head">
+              <span class="sc-icon">↻</span>
+              <span class="sc-name">记忆清零</span>
+            </div>
+            <div class="sc-desc">第二天新会话开始 → 又回到了 <strong>起点</strong></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 4: ROOT CAUSE ============ -->
+    <div class="slide" data-idx="4">
+      <div class="tag anim-up" style="background:rgba(255,77,77,.2);border-color:rgba(255,77,77,.5);color:var(--red);">根因分析</div>
+      <div class="root-layout">
+        <div class="root-title anim-up d1">
+          每次对话都是<br>
+          <span class="rt-highlight">Claude 的"入职第一天"</span>
+        </div>
+        <div class="root-box anim-scale d2">
+          <div class="rb-line1">这不是 Claude 的能力缺陷，而是所有大模型的共性</div>
+          <div class="rb-line2">→ 每次会话，上下文必须从零开始构建</div>
+        </div>
+        <div class="root-badge anim-scale d3">
+          <span class="rb-icon">📌</span>
+          会话结束 = 记忆清零 ⤾
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 5: CONVENTION COMPARISON ============ -->
+    <div class="slide" data-idx="5">
+      <div class="conv-layout">
+        <div class="conv-side conv-left anim-left d1">
+          <div class="cs-label">CONVENTION</div>
+          <div class="cs-title">Convention over Configuration</div>
+          <div class="cs-sub">（Ruby on Rails 的约定）</div>
+          <div class="cs-list">
+            <div class="cs-item"><span class="ci-arrow">→</span> 数据库表名 → 复数</div>
+            <div class="cs-item"><span class="ci-arrow">→</span> 模型名 → 单数</div>
+            <div class="cs-item"><span class="ci-arrow">→</span> 控制器 → <code style="color:var(--cyan);background:rgba(0,243,255,.08);border-radius:4px;padding:2px 6px;">app/controllers</code></div>
+          </div>
+          <div class="cs-note">框架约定 = 外化的隐性知识</div>
+        </div>
+        <div class="conv-arrow anim-scale d3">→</div>
+        <div class="conv-side conv-right anim-right d2">
+          <div class="cs-label">CLAUDE'S CONVENTION</div>
+          <div class="cs-title">Claude 的"约定"</div>
+          <div class="cs-sub">（来自训练数据的统计偏好）</div>
+          <div class="cs-list">
+            <div class="cs-item"><span class="ci-arrow">></span> <code style="color:var(--cyan);background:rgba(0,243,255,.08);border-radius:4px;padding:2px 6px;">Express</code> 优先于 <code style="color:var(--text-dim);background:rgba(255,255,255,.06);border-radius:4px;padding:2px 6px;">Fastify</code></div>
+            <div class="cs-item"><span class="ci-arrow">></span> <code style="color:var(--cyan);background:rgba(0,243,255,.08);border-radius:4px;padding:2px 6px;">npm</code> 优先于 <code style="color:var(--text-dim);background:rgba(255,255,255,.06);border-radius:4px;padding:2px 6px;">pnpm</code></div>
+            <div class="cs-item"><span class="ci-arrow">></span> <code style="color:var(--cyan);background:rgba(0,243,255,.08);border-radius:4px;padding:2px 6px;">JavaScript</code> 优先于 <code style="color:var(--text-dim);background:rgba(255,255,255,.06);border-radius:4px;padding:2px 6px;">TypeScript</code></div>
+            <div class="cs-item"><span class="ci-arrow">></span> 无项目上下文 → 使用训练默认值</div>
+          </div>
+        </div>
+      </div>
+      <div class="conv-verdict anim-in d5">
+        Claude 缺失的不是 <span class="cv-red">能力</span>，而是 <span class="cv-gold">上下文</span>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 6: SOLUTION ============ -->
+    <div class="slide" data-idx="6">
+      <div class="tag anim-up">SOLUTION · 解决方案</div>
+      <div class="solution-layout">
+        <div class="solution-head anim-up d1">
+          <div class="sh-label">SOLUTION</div>
+          <div class="sh-title">CLAUD.md</div>
+          <div class="sh-sub">AI 的专属入职手册</div>
+        </div>
+        <div class="solution-cards">
+          <div class="solution-card anim-scale d2">
+            <div class="sc-icon">▶</div>
+            <div class="sc-name">自动加载</div>
+            <div class="sc-desc">对话启动时，自动扫描注入</div>
+          </div>
+          <div class="solution-card anim-scale d3">
+            <div class="sc-icon">📄</div>
+            <div class="sc-name">Markdown 格式</div>
+            <div class="sc-desc">结构化文本<br>易读 · 易维护</div>
+          </div>
+          <div class="solution-card anim-scale d4">
+            <div class="sc-icon">⏱️</div>
+            <div class="sc-name">系统上下文</div>
+            <div class="sc-desc">注入系统提示词<br>统领全局</div>
+          </div>
+        </div>
+        <div class="solution-chain anim-in d5">
+          <span>🔁 流程链：</span>
+          <span>每次对话启动</span>
+          <span class="sc-arrow">→</span>
+          <span>自动扫描</span>
+          <span class="sc-arrow">→</span>
+          <span>注入上下文</span>
+          <span class="sc-arrow">→</span>
+          <span>全程记忆</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 7: CONFIG EVOLUTION ============ -->
+    <div class="slide" data-idx="7">
+      <div class="cfg-layout">
+        <div class="cfg-side cfg-left anim-left d1">
+          <div class="cg-title">传统配置文件</div>
+          <div class="cg-list">
+            <div class="cg-item"><span class="cg-file">.eslintrc</span> → 代码风格约定</div>
+            <div class="cg-item"><span class="cg-file">tsconfig.json</span> → 类型规则</div>
+            <div class="cg-item"><span class="cg-file">.prettierrc</span> → 格式化标准</div>
+          </div>
+          <div class="cg-note">将团队隐性约定外化为 <strong>机器可读的配置</strong></div>
+          <div class="cg-reader">读者：编译器 / Linter</div>
+        </div>
+        <div class="cfg-arrow anim-scale d3">
+          <div class="ca-label">AI 时代 ·<br>自然延伸</div>
+          <div class="ca-icon">→</div>
+        </div>
+        <div class="cfg-side cfg-right anim-right d2">
+          <div class="cg-title">CLAUD.md</div>
+          <div class="cg-check">✅ 将项目约定外化为：<br><strong style="color:var(--gold);">大模型可理解的自然语言配置</strong></div>
+          <div class="cg-bullets">
+            <div class="cg-bullet"><span class="cb-dot"></span>技术栈与框架偏好</div>
+            <div class="cg-bullet"><span class="cb-dot"></span>代码规范与命名约定</div>
+            <div class="cg-bullet"><span class="cb-dot"></span>项目架构与工作流</div>
+          </div>
+          <div class="cg-reader" style="margin-top:18px;">读者：Claude Code 大模型</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 8: FIVE LAYERS ============ -->
+    <div class="slide" data-idx="8">
+      <div class="layers-layout">
+        <div class="tag anim-up" style="background:rgba(255,215,0,.2);border-color:rgba(255,215,0,.5);color:var(--gold);">🧠 五层记忆体系</div>
+        <div class="layers-title anim-up d1">五层记忆体系</div>
+        <div class="layers-sub anim-in d2">类比公司制度管理体系</div>
+        <div class="layers-stack">
+          <div class="layer-item anim-left d2">
+            <div class="li-num">①</div>
+            <div class="li-main">
+              <span class="li-name">企业级</span>
+              <span class="li-sep">｜</span>
+              <span class="li-doc">《基本法》</span>
+            </div>
+            <div class="li-desc">铁律，不得擅自修改</div>
+          </div>
+          <div class="layer-item anim-left d3">
+            <div class="li-num">②</div>
+            <div class="li-main">
+              <span class="li-name">用户级</span>
+              <span class="li-sep">｜</span>
+              <span class="li-doc">《业务规范手册》</span>
+            </div>
+            <div class="li-desc">业务线标准</div>
+          </div>
+          <div class="layer-item anim-left d4">
+            <div class="li-num">③</div>
+            <div class="li-main">
+              <span class="li-name">项目级</span>
+              <span class="li-sep">｜</span>
+              <span class="li-doc">《项目开发规范》</span>
+              <span class="li-badge layer-badge">🔑 核心</span>
+            </div>
+            <div class="li-desc">单个产品技术约定</div>
+          </div>
+          <div class="layer-item anim-left d5">
+            <div class="li-num">④</div>
+            <div class="li-main">
+              <span class="li-name">规则级</span>
+              <span class="li-sep">｜</span>
+              <span class="li-doc">《专项操作指引》</span>
+            </div>
+            <div class="li-desc">按场景激活</div>
+          </div>
+          <div class="layer-item anim-left d6">
+            <div class="li-num">⑤</div>
+            <div class="li-main">
+              <span class="li-name">本地级</span>
+              <span class="li-sep">｜</span>
+              <span class="li-doc">《私人便签》</span>
+            </div>
+            <div class="li-desc">仅对自己可见</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 9: FIVE LAYERS TABLE ============ -->
+    <div class="slide" data-idx="9">
+      <div class="table-layout">
+        <div class="tag anim-up">REFERENCE · 完整对照表</div>
+        <div class="table-title anim-up d1">五层记忆体系 · 完整对照表</div>
+        <table class="layers-table anim-scale d2">
+          <thead>
+            <tr>
+              <th>层级</th>
+              <th>文件位置</th>
+              <th>管理者</th>
+              <th>适用范围</th>
+              <th>特点</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="row-purple">
+              <td class="lt-level">企业级</td>
+              <td><span class="lt-path">企业部署配置</span></td>
+              <td>运维团队</td>
+              <td>全员</td>
+              <td>铁律 · 合规底线</td>
+            </tr>
+            <tr class="row-cyan">
+              <td class="lt-level">用户级</td>
+              <td><span class="lt-path">~/.claude/CLAUD.md</span></td>
+              <td>开发者本人</td>
+              <td>所有项目</td>
+              <td>个人偏好档案</td>
+            </tr>
+            <tr class="row-gold">
+              <td class="lt-level"><strong>项目级</strong> <span class="lt-badge" style="background:rgba(255,215,0,.15);color:var(--gold);">核心</span></td>
+              <td><span class="lt-path">./CLAUD.md</span></td>
+              <td>项目团队</td>
+              <td>当前项目</td>
+              <td>入职手册 · 提交 Git</td>
+            </tr>
+            <tr class="row-orange">
+              <td class="lt-level">规则级</td>
+              <td><span class="lt-path">.claude/rules/</span></td>
+              <td>项目团队</td>
+              <td>特定场景</td>
+              <td>条件触发 · 懒加载</td>
+            </tr>
+            <tr class="row-red">
+              <td class="lt-level">本地级</td>
+              <td><span class="lt-path">CLAUD.local.md</span></td>
+              <td>开发者本人</td>
+              <td>本机</td>
+              <td>私人便签 · <code style="color:var(--text-dim);background:rgba(255,255,255,.06);border-radius:4px;padding:2px 6px;">.gitignore</code></td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="lt-note anim-in d3">💡 注：项目级为<strong style="color:var(--gold);">核心层</strong>，是工程落地的关键入口。</div>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 10: ENTERPRISE & USER LEVEL ============ -->
+    <div class="slide" data-idx="10">
+      <div class="tag anim-up" style="background:rgba(180,130,255,.12);border-color:rgba(180,130,255,.3);color:var(--purple);">层级详解 · 第 1 & 2 层</div>
+      <div class="duo-layout">
+        <div class="duo-side duo-left anim-left d1">
+          <div class="ds-num">第 1 层 ｜ 企业级</div>
+          <div class="ds-title">合规天花板 · 铁律底线</div>
+          <div class="ds-sub">🔹 典型策略示例：</div>
+          <div class="ds-list">
+            <div class="ds-item"><span class="di-icon" style="color:var(--red);">❌</span> 禁止调用外部 API</div>
+            <div class="ds-item"><span class="di-icon" style="color:var(--red);">❌</span> 禁止硬编码密钥</div>
+            <div class="ds-item"><span class="di-icon" style="color:var(--green);">✅</span> ORM 强制使用</div>
+          </div>
+          <div class="ds-foot">由企业管理员统一配置<br>所有开发者不可覆盖</div>
+        </div>
+        <div class="duo-side duo-right anim-right d2">
+          <div class="ds-num">第 2 层 ｜ 用户级</div>
+          <div class="ds-title" style="font-family:'JetBrains Mono',monospace;font-size:1.8rem;">~/.claude/CLAUD.md</div>
+          <div class="ds-sub">🔹 适合配置内容：</div>
+          <div class="ds-list">
+            <div class="ds-item"><span class="di-icon">📌</span> <strong>语言偏好</strong></div>
+            <div class="ds-sub-item">总是用中文回答 / 注释</div>
+            <div class="ds-item"><span class="di-icon">📌</span> <strong>Git 提交格式</strong></div>
+            <div class="ds-sub-item">Conventional Commits 规范</div>
+            <div class="ds-item"><span class="di-icon">📌</span> <strong>快捷指令映射</strong></div>
+            <div class="ds-sub-item">个人常用命令别名</div>
+          </div>
+          <div class="ds-foot">个人偏好档案 · 跨所有项目生效</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 11: 项目级 vs 规则级 ============ -->
+    <div class="slide" data-idx="11">
+      <div class="tag anim-up" style="background:rgba(255,215,0,.12);border-color:rgba(255,215,0,.3);color:var(--gold);">层级详解 · 第 3 & 4 层</div>
+      <div class="duo-v2">
+        <div class="d-side d-gold anim-left d1">
+          <div class="d-tag">第 3 层 · 核心</div>
+          <div class="d-name">项目级</div>
+          <div class="d-path">./CLAUD.md（项目根目录）</div>
+          <div class="d-list">
+            <div class="d-item"><span class="di-icon">✅</span> <strong>提交到 Git</strong></div>
+            <div class="d-sub">新同事 clone 即获得完整项目上下文</div>
+            <div class="d-item"><span class="di-icon">✅</span> <strong>团队共享约定</strong></div>
+            <div class="d-sub">技术栈、代码规范、架构决策 → 一次性写入</div>
+          </div>
+          <div class="d-foot">如同项目入职手册</div>
+        </div>
+        <div class="d-side d-orange anim-right d2">
+          <div class="d-tag">第 4 层 · 进阶</div>
+          <div class="d-name">规则级</div>
+          <div class="d-path">.claude/rules/ 目录</div>
+          <div class="d-list">
+            <div class="d-item"><span class="di-icon">⚙️</span> <strong>条件化触发</strong></div>
+            <div class="d-sub">按任务场景按需激活 · 不常驻上下文</div>
+            <div class="d-item"><span class="di-icon">📁</span> <strong>场景化示例</strong></div>
+            <div class="d-sub" style="font-family:'JetBrains Mono',monospace;font-size:.95rem;color:var(--cyan);">react-component.md · api-design.md</div>
+          </div>
+          <div class="d-foot">"懒加载"理念 · 减少噪音</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 12: 本地级 + 冲突解决 ============ -->
+    <div class="slide" data-idx="12">
+      <div class="tag anim-up" style="background:rgba(255,77,77,.12);border-color:rgba(255,77,77,.3);color:var(--red);">层级详解 · 第 5 层</div>
+      <div class="duo-v2">
+        <div class="d-side d-red anim-left d1">
+          <div class="d-tag">第 5 层 · 私人</div>
+          <div class="d-name">本地级</div>
+          <div class="d-path">.claude/local.md（自动 gitignore）</div>
+          <div style="font-size:1.05rem;color:var(--text-dim);margin-bottom:14px;">🔹 典型使用场景：</div>
+          <div class="d-list">
+            <div class="d-item"><span class="di-icon" style="color:var(--red);">▸</span> 数据库本地连接地址</div>
+            <div class="d-item"><span class="di-icon" style="color:var(--red);">▸</span> 维护窗口注意事项</div>
+            <div class="d-item"><span class="di-icon" style="color:var(--red);">▸</span> CORS 排查临时记录</div>
+            <div class="d-item"><span class="di-icon" style="color:var(--red);">▸</span> 个人调试环境变量</div>
+          </div>
+          <div class="d-foot">仅对自己可见 · 不影响团队</div>
+        </div>
+        <div class="d-side d-purple anim-right d2">
+          <div class="d-tag">核心机制</div>
+          <div class="d-name">冲突解决机制</div>
+          <div style="font-size:1.2rem;color:var(--gold);font-weight:700;margin-bottom:6px;">"就近覆盖"原则</div>
+          <div style="font-size:1.05rem;color:var(--text-dim);margin-bottom:18px;">越具体，优先级越高</div>
+          <table style="width:100%;border-collapse:separate;border-spacing:0 6px;">
+            <tr><td style="padding:8px 14px;background:var(--dark-card);border-radius:8px 0 0 8px;font-weight:700;color:var(--red);width:40px;">⑤</td><td style="padding:8px 14px;background:var(--dark-card);color:var(--text);font-weight:600;">本地级</td><td style="padding:8px 14px;background:var(--dark-card);border-radius:0 8px 8px 0;color:var(--text-dim);">最高优先级</td></tr>
+            <tr><td style="padding:8px 14px;background:var(--dark-card);border-radius:8px 0 0 8px;font-weight:700;color:#FF8C00;">④</td><td style="padding:8px 14px;background:var(--dark-card);color:var(--text);font-weight:600;">规则级</td><td style="padding:8px 14px;background:var(--dark-card);border-radius:0 8px 8px 0;color:var(--text-dim);">场景激活</td></tr>
+            <tr><td style="padding:8px 14px;background:var(--dark-card);border-radius:8px 0 0 8px;font-weight:700;color:var(--gold);">③</td><td style="padding:8px 14px;background:var(--dark-card);color:var(--text);font-weight:600;">项目级</td><td style="padding:8px 14px;background:var(--dark-card);border-radius:0 8px 8px 0;color:var(--text-dim);">团队共享</td></tr>
+            <tr><td style="padding:8px 14px;background:var(--dark-card);border-radius:8px 0 0 8px;font-weight:700;color:var(--cyan);">②</td><td style="padding:8px 14px;background:var(--dark-card);color:var(--text);font-weight:600;">用户级</td><td style="padding:8px 14px;background:var(--dark-card);border-radius:0 8px 8px 0;color:var(--text-dim);">个人偏好</td></tr>
+            <tr><td style="padding:8px 14px;background:var(--dark-card);border-radius:8px 0 0 8px;font-weight:700;color:var(--purple);">①</td><td style="padding:8px 14px;background:var(--dark-card);color:var(--text);font-weight:600;">企业级</td><td style="padding:8px 14px;background:var(--dark-card);border-radius:0 8px 8px 0;color:var(--text-dim);">绝对天花板</td></tr>
+          </table>
+          <div class="d-foot" style="margin-top:14px;">⚠️ 企业级规则<strong style="color:var(--red);">不可被任何层级覆盖</strong>，保障合规底线</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 13: 办公桌比喻 + 指令密度定律 ============ -->
+    <div class="slide" data-idx="13">
+      <div class="tag anim-up">WRITING · 写作范式</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:50px;width:100%;max-width:1500px;text-align:left;align-items:start;">
+        <div class="anim-left d1">
+          <div style="font-size:2.2rem;font-weight:700;margin-bottom:20px;">📝 办公桌比喻</div>
+          <div style="background:rgba(255,255,255,.04);border-left:3px solid var(--gold);border-radius:0 12px 12px 0;padding:24px 28px;font-size:1.15rem;line-height:1.7;color:var(--text-dim);font-style:italic;margin-bottom:24px;">
+            "写 CLAUD.md 就像整理办公桌——<br>把最常用的工具放在桌面最显眼处，<br>偶尔用的放进抽屉里，<br>不用的搬进储藏室。"<br><span style="font-size:.95rem;opacity:.6;font-style:normal;">—— 大佬</span>
+          </div>
+          <table style="width:100%;border-collapse:separate;border-spacing:0 6px;">
+            <tr><td style="padding:10px 16px;background:var(--dark-card);border-radius:8px 0 0 8px;font-weight:700;color:var(--gold);">桌面</td><td style="padding:10px 16px;background:var(--dark-card);color:var(--text);">项目级</td><td style="padding:10px 16px;background:var(--dark-card);border-radius:0 8px 8px 0;font-family:'JetBrains Mono',monospace;font-size:.95rem;color:var(--cyan);">CLAUD.md</td></tr>
+            <tr><td style="padding:10px 16px;background:var(--dark-card);border-radius:8px 0 0 8px;font-weight:700;color:#FF8C00;">抽屉</td><td style="padding:10px 16px;background:var(--dark-card);color:var(--text);">规则级</td><td style="padding:10px 16px;background:var(--dark-card);border-radius:0 8px 8px 0;font-family:'JetBrains Mono',monospace;font-size:.95rem;color:var(--cyan);">.claude/rules/</td></tr>
+            <tr><td style="padding:10px 16px;background:var(--dark-card);border-radius:8px 0 0 8px;font-weight:700;color:var(--text-dim);">储藏室</td><td style="padding:10px 16px;background:var(--dark-card);color:var(--text-dim);">外部文档</td><td style="padding:10px 16px;background:var(--dark-card);border-radius:0 8px 8px 0;color:var(--text-dim);">独立 Markdown / Wiki</td></tr>
+          </table>
+        </div>
+        <div class="anim-right d2">
+          <div style="font-size:2.2rem;font-weight:700;margin-bottom:20px;">📊 指令规模与质量</div>
+          <div style="background:var(--dark-card);border:1px solid rgba(0,243,255,.15);border-radius:14px;padding:24px;margin-bottom:16px;">
+            <div style="font-family:'Orbitron',sans-serif;font-size:2rem;font-weight:700;color:var(--cyan);margin-bottom:6px;">~50 条</div>
+            <div style="font-size:1.05rem;color:var(--text-dim);">系统内置核心指令 · Claude Code 出厂标准配置</div>
+            <div style="font-size:1rem;color:var(--green);margin-top:6px;">✅ 健康阈值范围内</div>
+          </div>
+          <div style="background:var(--dark-card);border:1px solid rgba(255,77,77,.15);border-radius:14px;padding:24px;margin-bottom:16px;">
+            <div style="font-family:'Orbitron',sans-serif;font-size:2rem;font-weight:700;color:var(--red);margin-bottom:6px;">150+ 条</div>
+            <div style="font-size:1.05rem;color:var(--text-dim);">自定义指令上限警戒线</div>
+            <div style="font-size:1rem;color:var(--red);margin-top:6px;">⚠️ 超过此数量 → 注意力稀释风险</div>
+          </div>
+          <div style="background:rgba(255,215,0,.06);border:1px solid rgba(255,215,0,.2);border-radius:14px;padding:24px;">
+            <div style="font-size:1.3rem;font-weight:700;color:var(--gold);margin-bottom:6px;">📐 核心定律</div>
+            <div style="font-size:1.2rem;color:var(--gold);font-style:italic;">指令密度 ∝ 1 / 遵循概率</div>
+            <div style="font-size:1rem;color:var(--text-dim);margin-top:6px;">指令越多，每条被遵循的概率越低</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 14: 三问框架 ============ -->
+    <div class="slide" data-idx="14">
+      <div class="tag anim-up">FRAMEWORK · 三问框架</div>
+      <h2 class="slide-title anim-up d1">精选内容的<span class="gold">黄金标准</span></h2>
+      <div class="divider anim-in d2"></div>
+      <div class="tri-grid">
+        <div class="tri-card anim-scale d2">
+          <div class="tc-head">🔵 WHY</div>
+          <div class="tc-sub">为什么这样做 · 举一反三 · 推理能力</div>
+          <div class="tc-example">📌 选择 Fastify 而非 Express，因其 schema-based validation 符合"类型安全优先"原则，有助于 Claude 推断类似场景的选择。</div>
+        </div>
+        <div class="tri-card anim-scale d3">
+          <div class="tc-head">🟡 WHAT</div>
+          <div class="tc-sub">做什么 / 不做什么 · 行为边界 · 明确规范</div>
+          <div class="tc-example">📌 必须使用 <code>pnpm</code>，严禁使用 <code>npm</code> 或 <code>yarn</code>。此类规则无需 WHY，一句话即可。</div>
+        </div>
+        <div class="tri-card anim-scale d4">
+          <div class="tc-head">🟢 HOW</div>
+          <div class="tc-sub">如何执行 · 标准作业程序 · SOP</div>
+          <div class="tc-example">📌 <code>pnpm db:migrate</code> 执行迁移，<code>pnpm db:seed</code> 填充测试数据，顺序不可颠倒。</div>
+        </div>
+      </div>
+      <div style="margin-top:20px;font-size:1.1rem;color:var(--text-dim);background:rgba(255,255,255,.03);border-radius:10px;padding:14px 28px;display:inline-block;" class="anim-in d5">
+        💡 大多数规则只需 <strong style="color:var(--gold);">WHAT</strong> 一句话，只有容易误解的才补充 <strong style="color:var(--cyan);">WHY</strong>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 15: 反面 vs 正面案例 ============ -->
+    <div class="slide" data-idx="15">
+      <div class="tag anim-up">QUALITY · 内容质量对比</div>
+      <h2 class="slide-title anim-up d1">反面 vs 正面<span class="cyan">案例</span></h2>
+      <div class="divider anim-in d2"></div>
+      <div class="cmp-layout">
+        <div class="cmp-side cmp-bad anim-left d2">
+          <div class="cm-icon">❌</div>
+          <div class="cm-title">反面案例｜模糊的"正确废话"</div>
+          <div class="cm-list">
+            <div class="cm-item"><span style="color:var(--red);font-size:1.2rem;margin-right:4px;">▸</span> 项目说明</div>
+            <div class="cm-item"><span style="color:var(--red);font-size:1.2rem;margin-right:4px;">▸</span> 代码要写得好一些</div>
+            <div class="cm-item"><span style="color:var(--red);font-size:1.2rem;margin-right:4px;">▸</span> 注意性能</div>
+            <div class="cm-item"><span style="color:var(--red);font-size:1.2rem;margin-right:4px;">▸</span> 测试要全面</div>
+            <div class="cm-item"><span style="color:var(--red);font-size:1.2rem;margin-right:4px;">▸</span> 请遵循最佳实践</div>
+          </div>
+          <div class="cm-q">
+            ❓ 好到什么程度？全面覆盖哪些场景？谁的最佳实践？
+          </div>
+        </div>
+        <div class="cmp-side cmp-good anim-right d3">
+          <div class="cm-icon">✅</div>
+          <div class="cm-title">正面案例｜精准的"操作手册"</div>
+          <div style="font-size:1rem;color:var(--text-dim);margin-bottom:4px;">技术栈</div>
+          <div class="cm-tech">Node 20 + TypeScript + Fastify + Prisma</div>
+          <div style="font-size:1rem;color:var(--text-dim);margin-bottom:8px;">常用命令</div>
+          <div class="cm-cmds">
+            <div class="cm-cmd"><code>pnpm dev</code> <span class="cc-arrow">→</span> 启动开发服务器</div>
+            <div class="cm-cmd"><code>pnpm test</code> <span class="cc-arrow">→</span> 运行单元测试</div>
+            <div class="cm-cmd"><code>pnpm build</code> <span class="cc-arrow">→</span> 构建生产包</div>
+            <div class="cm-cmd"><code>pnpm db:migrate</code> <span class="cc-arrow">→</span> 执行数据库迁移</div>
+          </div>
+          <div class="cm-q" style="margin-top:14px;">
+            ✅ 具体 · 可执行 · 无歧义<br>Claude 看到即可直接操作
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 16: /init 与 /memory ============ -->
+    <div class="slide" data-idx="16">
+      <div class="tag anim-up">COMMANDS · 两大内置命令</div>
+      <h2 class="slide-title anim-up d1"><span class="cyan">/init</span> 与 <span class="gold">/memory</span></h2>
+      <div class="divider anim-in d2"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;width:100%;max-width:1500px;text-align:left;align-items:start;">
+        <div style="background:var(--dark-card);border:1px solid rgba(0,243,255,.15);border-radius:18px;padding:36px;" class="anim-left d2">
+          <div style="font-size:1.6rem;font-weight:700;color:var(--cyan);margin-bottom:6px;">🔵 /init｜自动生成初稿</div>
+          <div class="d-list" style="margin-top:16px;">
+            <div class="d-item"><span class="di-icon" style="color:var(--cyan);">▸</span> 扫描：<code style="font-family:'JetBrains Mono',monospace;font-size:.95rem;background:rgba(0,243,255,.08);border-radius:4px;padding:2px 6px;">package.json</code>、目录结构、脚本命令</div>
+            <div class="d-item"><span class="di-icon" style="color:var(--cyan);">▸</span> 提炼：技术栈 · 目录 · 常用脚本</div>
+            <div class="d-item"><span class="di-icon" style="color:var(--cyan);">▸</span> 输出：几秒内生成 <code style="font-family:'JetBrains Mono',monospace;font-size:.95rem;background:rgba(255,215,0,.08);border-radius:4px;padding:2px 6px;color:var(--gold);">CLAUD.md</code> 初稿</div>
+          </div>
+          <div style="font-size:1rem;color:var(--text-dim);background:rgba(255,215,0,.06);border-radius:8px;padding:12px 16px;margin-top:12px;">⚠️ 注意：仅覆盖显性知识，隐性规范需人工补充</div>
+        </div>
+        <div style="background:var(--dark-card);border:1px solid rgba(255,215,0,.15);border-radius:18px;padding:36px;" class="anim-right d3">
+          <div style="font-size:1.6rem;font-weight:700;color:var(--gold);margin-bottom:6px;">🟡 /memory｜对话中动态更新</div>
+          <div class="d-list" style="margin-top:16px;">
+            <div class="d-item"><span class="di-icon" style="color:var(--gold);">▸</span> 对话中随时调用</div>
+            <div class="d-item"><span class="di-icon" style="color:var(--gold);">▸</span> 弹出文件选择器 → 选目标文件 → 追加新规则</div>
+            <div class="d-item"><span class="di-icon" style="color:var(--gold);">▸</span> 构建闭环：犯错 → 纠正 → 记忆</div>
+          </div>
+          <div style="font-size:1rem;color:var(--green);background:rgba(0,200,120,.06);border-radius:8px;padding:12px 16px;margin-top:12px;">✅ 即时反馈 · 持续迭代优化</div>
+        </div>
+      </div>
+      <div class="flow-chain anim-in d5">
+        <span>🔄 错误驱动优化：</span>
+        <span style="color:var(--red);">犯错</span>
+        <span class="fc-arrow">→</span>
+        <span>执行 <code>/memory</code></span>
+        <span class="fc-arrow">→</span>
+        <span>选目标文件</span>
+        <span class="fc-arrow">→</span>
+        <span>追加规则</span>
+        <span class="fc-arrow">→</span>
+        <span style="color:var(--green);">下次生效</span>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 17: 条件化规则系统 ============ -->
+    <div class="slide" data-idx="17">
+      <div class="tag anim-up">RULES · 条件化规则系统</div>
+      <h2 class="slide-title anim-up d1"><span class="gold">模块化</span>知识库</h2>
+      <div class="divider anim-in d2"></div>
+      <div class="ps-layout">
+        <div class="ps-side ps-problem anim-left d2">
+          <div class="ps-icon">⚠️</div>
+          <div class="ps-title">单一 CLAUD.md 的两大问题</div>
+          <div class="ps-list">
+            <div class="ps-item"><span class="pi-num">1</span> <div><strong>维护噩梦</strong><br><span style="color:var(--text-dim);font-size:1rem;">规则越多，文件越长，修改牵一发而动全身</span></div></div>
+            <div class="ps-item"><span class="pi-num">2</span> <div><strong>注意力分散</strong><br><span style="color:var(--text-dim);font-size:1rem;">每次对话加载全部规则，浪费 Context Window</span></div></div>
+          </div>
+        </div>
+        <div class="ps-side ps-solution anim-right d3">
+          <div class="ps-icon">✅</div>
+          <div class="ps-title" style="font-family:'JetBrains Mono',monospace;font-size:1.4rem;">.claude/rules/ 目录方案</div>
+          <div style="font-size:1rem;color:var(--text-dim);margin-bottom:14px;">模块化文件示例</div>
+          <div class="ps-modules">
+            <span class="ps-mod">testing.md</span>
+            <span class="ps-mod">database.md</span>
+            <span class="ps-mod">api-design.md</span>
+            <span class="ps-mod">deploy.md</span>
+          </div>
+          <div class="ps-features">
+            <div class="ps-feat"><div class="pf-label">🔹 领域拆分</div><div class="pf-desc">每个文件聚焦单一领域，独立维护</div></div>
+            <div class="ps-feat"><div class="pf-label">🔹 智能激活</div><div class="pf-desc">Glob 模式匹配，按需加载相关规则</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 18: 规则文件示例 ============ -->
+    <div class="slide" data-idx="18">
+      <div class="tag anim-up">EXAMPLES · 规则文件示例</div>
+      <h2 class="slide-title anim-up d1">三个领域<span class="cyan">规则文件</span></h2>
+      <div class="divider anim-in d2"></div>
+      <div class="tri-grid">
+        <div class="tri-card anim-scale d2">
+          <div class="tc-head" style="font-family:'JetBrains Mono',monospace;">testing.md</div>
+          <div class="code-block">
+            <span class="cb-key">paths:</span> <span class="cb-val">**/*.test.ts</span><br>
+            <span class="cb-key">框架:</span> <span class="cb-val">vitest</span><br>
+            <span class="cb-key">禁止:</span> <span class="cb-val">使用 jest</span><br>
+            <span class="cb-key">Mock:</span> <span class="cb-val">vi.mock()</span><br>
+            <span class="cb-key">异步:</span> <span class="cb-val">async/await 风格</span>
+          </div>
+        </div>
+        <div class="tri-card anim-scale d3">
+          <div class="tc-head" style="font-family:'JetBrains Mono',monospace;">database.md</div>
+          <div class="code-block">
+            <span class="cb-key">paths:</span> <span class="cb-val">prisma/**</span><br>
+            <span class="cb-key">迁移:</span> <span class="cb-val">不得修改已有文件</span><br>
+            <span class="cb-key">查询:</span> <span class="cb-val">经 repository 层</span><br>
+            <span class="cb-key">批量:</span> <span class="cb-val">用事务包裹操作</span>
+          </div>
+        </div>
+        <div class="tri-card anim-scale d4">
+          <div class="tc-head" style="font-family:'JetBrains Mono',monospace;color:var(--gold);">api-design.md</div>
+          <div class="code-block">
+            <span class="cb-key">paths:</span> <span class="cb-val">src/routes/**</span><br>
+            <span class="cb-key">入参:</span> <span class="cb-val">zod schema 验证</span><br>
+            <span class="cb-key">响应:</span> <span class="cb-val">统一格式结构</span><br>
+            <span class="cb-key">错误码:</span> <span class="cb-val">常量文件定义</span>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:18px;font-size:1.1rem;color:var(--gold);letter-spacing:1px;" class="anim-in d5">
+        ✅ 每个文件仅在匹配对应路径的文件时才会加载 · <strong>精准激活 · 零噪音</strong>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 19: 三种项目实战配置 ============ -->
+    <div class="slide" data-idx="19">
+      <div class="tag anim-up">PROJECTS · 典型项目配置</div>
+      <h2 class="slide-title anim-up d1">三种项目<span class="gold">实战配置</span></h2>
+      <div class="divider anim-in d2"></div>
+      <div class="tri-grid">
+        <div class="tri-card anim-scale d2">
+          <div class="tc-head">🔵 React 前端项目</div>
+          <div class="tc-sub" style="font-family:'JetBrains Mono',monospace;font-size:.95rem;">React 18 + TypeScript + Vite</div>
+          <div style="background:rgba(255,77,77,.1);border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:1rem;color:var(--red);">🔴 核心痛点<br><span style="color:var(--text-dim);font-size:.95rem;">状态管理混乱：何时用 useState / Zustand / Query？</span></div>
+          <div style="font-size:.95rem;color:var(--text-dim);">📌 重点规范：状态管理决策树</div>
+        </div>
+        <div class="tri-card anim-scale d3">
+          <div class="tc-head">🟡 Node.js 后端项目</div>
+          <div class="tc-sub" style="font-family:'JetBrains Mono',monospace;font-size:.95rem;">Fastify + Prisma + TypeScript</div>
+          <div style="background:rgba(255,77,77,.1);border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:1rem;color:var(--red);">🔴 核心痛点<br><span style="color:var(--text-dim);font-size:.95rem;">分层架构职责边界模糊，直接调用 Prisma 的反模式</span></div>
+          <div style="font-size:.95rem;color:var(--text-dim);">📌 重点规范：分层架构与 Repository 模式铁律</div>
+        </div>
+        <div class="tri-card anim-scale d4">
+          <div class="tc-head" style="color:var(--green);">🟢 Python 数据项目</div>
+          <div class="tc-sub" style="font-family:'JetBrains Mono',monospace;font-size:.95rem;">pandas + numpy + uv</div>
+          <div style="background:rgba(255,77,77,.1);border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:1rem;color:var(--red);">🔴 核心痛点<br><span style="color:var(--text-dim);font-size:.95rem;">数据处理规范不统一：inplace / NA 类型混用</span></div>
+          <div style="font-size:.95rem;color:var(--text-dim);">📌 重点规范：数据处理约定 · 统一类型与操作风格</div>
+        </div>
+      </div>
+      <div style="margin-top:16px;font-size:1.1rem;color:var(--gold);background:rgba(255,215,0,.06);border-radius:10px;padding:12px 28px;display:inline-block;" class="anim-in d5">
+        💣 优秀的 CLAUDE.md = <strong>精确制导武器</strong>，火力集中在最容易出问题的地方
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 20: React 状态管理决策树 ============ -->
+    <div class="slide" data-idx="20">
+      <div class="tag anim-up" style="background:rgba(0,243,255,.12);border-color:rgba(0,243,255,.3);color:var(--cyan);">REACT 前端项目</div>
+      <h2 class="slide-title anim-up d1">状态管理<span class="cyan">决策树</span></h2>
+      <div class="divider anim-in d2"></div>
+      <div style="display:grid;grid-template-columns:1fr 1.3fr;gap:50px;width:100%;max-width:1500px;text-align:left;align-items:start;">
+        <div class="anim-left d2">
+          <div style="font-size:1.4rem;font-weight:700;color:var(--cyan);margin-bottom:16px;">🛠️ 技术栈</div>
+          <table class="tech-table">
+            <tr><td>框架</td><td>React 18 + TypeScript</td></tr>
+            <tr><td>构建</td><td>Vite 5 + pnpm</td></tr>
+            <tr><td>请求</td><td>TanStack Query</td></tr>
+            <tr><td>状态</td><td>Zustand</td></tr>
+            <tr><td>样式</td><td>Tailwind CSS</td></tr>
+          </table>
+        </div>
+        <div class="anim-right d3">
+          <div style="font-size:1.4rem;font-weight:700;color:var(--gold);margin-bottom:16px;">🌲 状态管理决策树</div>
+          <div class="decision-tree">
+            <div class="dt-question">问题：这个数据是什么类型？</div>
+            <div class="dt-branch">
+              <div class="dt-label">🟦 服务器数据（来自 API）</div>
+              <div class="dt-arrow">→ TanStack Query</div>
+              <div class="dt-feature">✓ 缓存 · 同步 · 加载状态</div>
+            </div>
+            <div class="dt-branch">
+              <div class="dt-label">🟪 全局客户端端（跨组件共享）</div>
+              <div class="dt-arrow">→ Zustand</div>
+              <div class="dt-feature">✓ 轻量 · 无模板代码</div>
+            </div>
+            <div class="dt-branch">
+              <div class="dt-label">🟩 组件局部（仅本组件用）</div>
+              <div class="dt-arrow">→ useState</div>
+              <div class="dt-feature">✓ 简单 · 直接</div>
+            </div>
+          </div>
+          <div style="font-size:1rem;color:var(--gold);margin-top:14px;">🗝️ 场景到工具的映射，直接告诉 Claude 选哪把钥匙</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 21: Node.js 分层架构铁律 ============ -->
+    <div class="slide" data-idx="21">
+      <div class="tag anim-up" style="background:rgba(255,215,0,.12);border-color:rgba(255,215,0,.3);color:var(--gold);">NODE.JS 后端项目</div>
+      <h2 class="slide-title anim-up d1">分层架构<span class="gold">铁律</span></h2>
+      <div class="divider anim-in d2"></div>
+      <div style="display:grid;grid-template-columns:1fr 1.2fr;gap:50px;width:100%;max-width:1500px;text-align:left;align-items:start;">
+        <div class="anim-left d2">
+          <div style="font-size:1.3rem;font-weight:700;color:var(--cyan);margin-bottom:16px;">🔹 单向依赖分层架构</div>
+          <div class="layer-stack">
+            <div class="ls-row"><span class="ls-name">routes</span><span class="ls-arrow">↓</span><span class="ls-desc">HTTP 路由入口</span></div>
+            <div class="ls-row"><span class="ls-name">controllers</span><span class="ls-arrow">↓</span><span class="ls-desc">请求/响应协调</span></div>
+            <div class="ls-row"><span class="ls-name">services</span><span class="ls-arrow">↓</span><span class="ls-desc">业务逻辑核心</span></div>
+            <div class="ls-row"><span class="ls-name">repositories</span><span class="ls-arrow">↓</span><span class="ls-desc"><strong style="color:var(--gold);">Prisma</strong> 隔离在此层</span></div>
+          </div>
+          <div style="font-size:1rem;color:var(--text-dim);margin-top:12px;font-style:italic;">💡 严格单向依赖，禁止跨层调用或反向依赖</div>
+        </div>
+        <div class="anim-right d3">
+          <div style="background:rgba(255,77,77,.08);border:1px solid rgba(255,77,77,.2);border-radius:14px;padding:24px;margin-bottom:20px;">
+            <div style="font-size:1.3rem;font-weight:700;color:var(--red);margin-bottom:10px;">🚨 架构铁律</div>
+            <div style="font-size:1.1rem;color:var(--text);line-height:1.6;">❗ 严禁其他层级直接调用 <code style="font-family:'JetBrains Mono',monospace;background:rgba(255,77,77,.1);border-radius:4px;padding:2px 6px;color:var(--red);">Prisma</code><br>所有数据库操作必须通过 repositories 层完成<br><span style="color:var(--red);font-weight:600;">→ 这是架构铁律，而非风格偏好</span></div>
+          </div>
+          <div style="background:rgba(0,200,120,.06);border:1px solid rgba(0,200,120,.15);border-radius:14px;padding:24px;">
+            <div style="font-size:1.3rem;font-weight:700;color:var(--green);margin-bottom:12px;">⌨️ 常用命令</div>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:1rem;"><code style="color:var(--cyan);background:rgba(0,243,255,.08);border-radius:4px;padding:2px 6px;">npm dev</code> <span style="color:var(--text-dim);"># 启动开发服务器</span></div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:1rem;"><code style="color:var(--cyan);background:rgba(0,243,255,.08);border-radius:4px;padding:2px 6px;">npm test</code> <span style="color:var(--text-dim);"># 运行测试</span></div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:1rem;"><code style="color:var(--cyan);background:rgba(0,243,255,.08);border-radius:4px;padding:2px 6px;">npm build</code> <span style="color:var(--text-dim);"># 构建生产包</span></div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:1rem;"><code style="color:var(--cyan);background:rgba(0,243,255,.08);border-radius:4px;padding:2px 6px;">npm db:migrate</code> <span style="color:var(--text-dim);"># 执行数据库迁移</span></div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:1rem;"><code style="color:var(--cyan);background:rgba(0,243,255,.08);border-radius:4px;padding:2px 6px;">npm db:studio</code> <span style="color:var(--text-dim);"># 打开 Prisma Studio</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 22: Python 数据处理统一约定 ============ -->
+    <div class="slide" data-idx="22">
+      <div class="tag anim-up" style="background:rgba(0,200,120,.12);border-color:rgba(0,200,120,.3);color:var(--green);">PYTHON 数据项目</div>
+      <h2 class="slide-title anim-up d1">数据处理<span class="gold">统一约定</span></h2>
+      <div class="divider anim-in d2"></div>
+      <div class="cmp-layout">
+        <div class="cmp-side cmp-bad anim-left d2">
+          <div class="cm-icon">❌</div>
+          <div class="cm-title">容易出错的反面模式</div>
+          <div class="code-block" style="border-color:rgba(255,77,77,.2);">
+            <span class="cb-comment"># ❌ inplace=True 破坏数据流</span><br>
+            <span class="cb-val">df.drop_duplicates(inplace=True)</span><br>
+            <span class="cb-val">df.fillna(0, inplace=True)</span><br><br>
+            <span class="cb-comment"># ❌ 混用 None / np.nan / pd.NA</span><br>
+            <span class="cb-val">df['col'] = None</span><br>
+            <span class="cb-val">df['col'] = np.nan</span><br>
+            <span class="cb-val">df['col'] = pd.NA</span>
+          </div>
+          <div class="cm-q" style="margin-top:10px;">⚠️ 后果：数据状态不可追踪、调试困难</div>
+        </div>
+        <div class="cmp-side cmp-good anim-right d3">
+          <div class="cm-icon">✅</div>
+          <div class="cm-title">统一正确约定</div>
+          <div class="cm-list">
+            <div class="cm-item">✔️ <strong>缺失值统一</strong>：始终使用 <code style="font-family:'JetBrains Mono',monospace;font-size:.95rem;background:rgba(0,200,120,.08);border-radius:4px;padding:2px 6px;color:var(--green);">pd.NA</code></div>
+            <div class="cm-item">✔️ <strong>禁止 inplace</strong>：所有操作返回新 DataFrame</div>
+            <div class="cm-item">✔️ <strong>日期类型统一</strong>：强制 datetime64[ns]</div>
+            <div class="cm-item">✔️ <strong>低基变量优化</strong>：分类变量转 category</div>
+          </div>
+          <div style="font-size:1rem;color:var(--text-dim);margin-bottom:8px;">🔧 推荐工作流</div>
+          <div class="cm-cmds">
+            <div class="cm-cmd"><code>uv sync</code> <span class="cc-arrow">→</span> 同步依赖</div>
+            <div class="cm-cmd"><code>uv run pytest</code> <span class="cc-arrow">→</span> 运行单元测试</div>
+            <div class="cm-cmd"><code>uv run jupyter lab</code> <span class="cc-arrow">→</span> 启动交互分析</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 23: 黄金检验标准 ============ -->
+    <div class="slide" data-idx="23">
+      <div class="tag anim-up" style="background:rgba(255,215,0,.12);border-color:rgba(255,215,0,.3);color:var(--gold);">GOLDEN RULE · 黄金检验标准</div>
+      <h2 class="slide-title anim-up d1">内容去留的<span class="gold">终极判断</span></h2>
+      <div class="divider anim-in d2"></div>
+      <div class="golden-rule anim-scale d2">
+        <div class="gr-icon">✨</div>
+        <div class="gr-text">"如果删去某条规则后，Claude 依然能做出正确行为，<br>那么这条规则不该出现在 CLAUDE.md 中。"</div>
+        <div class="gr-sub">—— 用于裁剪冗余规则的核心判据</div>
+      </div>
+      <div class="eval-grid">
+        <div class="eval-card anim-scale d3">
+          <div class="ev-icon">✅</div>
+          <div class="ev-name">必要性</div>
+          <div class="ev-desc">Claude 必须知晓且无法自行推断<br>规则缺失将导致行为偏差</div>
+        </div>
+        <div class="eval-card anim-scale d4">
+          <div class="ev-icon">◎</div>
+          <div class="ev-name">可操作性</div>
+          <div class="ev-desc">具体、明确、可立即执行<br>无模糊表述（如"尽量""通常"）</div>
+        </div>
+        <div class="eval-card anim-scale d5">
+          <div class="ev-icon">⚠️</div>
+          <div class="ev-name">脆弱性测试</div>
+          <div class="ev-desc">删除后会直接导致 Claude 犯错<br>是"临界点规则"</div>
+        </div>
+      </div>
+      <div style="font-size:1rem;color:var(--text-dim);margin-top:16px;" class="anim-in d6">💡 任一维度不满足 → 该条规则应删除或重构</div>
+    </div>
+
+    <!-- ============ SLIDE 24: 本章小结 ============ -->
+    <div class="slide" data-idx="24">
+      <div class="tag anim-up">SUMMARY · 本章小结</div>
+      <h2 class="slide-title anim-up d1">核心认知<span class="gold">总结</span></h2>
+      <div class="divider anim-in d2"></div>
+      <div class="summary-layout">
+        <div class="summary-left anim-left d2">
+          <div style="font-size:1.4rem;font-weight:700;color:var(--gold);margin-bottom:20px;">🧠 三大核心认知</div>
+          <div class="sl-list">
+            <div class="sl-item">
+              <div class="sl-num">1</div>
+              <div class="sl-content">
+                <div class="slc-title" style="color:var(--gold);">CLAUDE.md = 解决 AI 失忆症</div>
+                <div class="slc-desc">每次对话重置不是 bug，而是需要正确应对的特性<br>→ 规则需覆盖"记忆边界"场景</div>
+              </div>
+            </div>
+            <div class="sl-item">
+              <div class="sl-num">2</div>
+              <div class="sl-content">
+                <div class="slc-title" style="color:var(--cyan);">五层体系 = 关注点分离</div>
+                <div class="slc-desc">企业级软件工程中最经典的架构原则，在记忆系统中的落地<br>→ 降低认知负荷，提升可维护性</div>
+              </div>
+            </div>
+            <div class="sl-item">
+              <div class="sl-num">3</div>
+              <div class="sl-content">
+                <div class="slc-title" style="color:var(--magenta);">少即是多 · 有技术原理支撑</div>
+                <div class="slc-desc">Context Window 有限 → 精准规则比冗长说明更有效<br>→ 优先选择"可验证、可测试"的最小规则集</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="summary-right anim-right d3">
+          <div style="font-size:1.4rem;font-weight:700;color:var(--text);margin-bottom:20px;">📋 五层职责速查</div>
+          <div class="sr-table">
+            <div class="sr-row"><span class="sr-dot" style="background:var(--red);"></span><span class="sr-name" style="color:var(--red);">企业级</span><span class="sr-desc">守底线 · 全局规范 · 所有项目遵守</span></div>
+            <div class="sr-row"><span class="sr-dot" style="background:#FF8C00;"></span><span class="sr-name" style="color:#FF8C00;">用户级</span><span class="sr-desc">存偏好 · 个人习惯 · 跨项目生效</span></div>
+            <div class="sr-row"><span class="sr-dot" style="background:var(--cyan);"></span><span class="sr-name" style="color:var(--cyan);">项目级</span><span class="sr-desc">承团队 · 协作规范 · 随代码提交</span></div>
+            <div class="sr-row"><span class="sr-dot" style="background:var(--purple);"></span><span class="sr-name" style="color:var(--purple);">规则级</span><span class="sr-desc">按需加载 · 领域知识 · Glob 激活</span></div>
+            <div class="sr-row"><span class="sr-dot" style="background:var(--green);"></span><span class="sr-name" style="color:var(--green);">本地级</span><span class="sr-desc">私人备忘 · 不提交 · 个人实验</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 25: 下章预告 ============ -->
+    <div class="slide" data-idx="25">
+      <div class="next-preview">
+        <div class="np-card anim-scale d1">
+          <div class="np-tag">NEXT · CHAPTER 03</div>
+          <div class="np-title">Skills · 工程实践</div>
+          <div class="np-sub">按需加载的领域知识 · 优雅的模块化解法</div>
+          <div class="np-list">
+            <div class="np-item"><span class="ni-dot"></span> 按需加载的领域知识</div>
+            <div class="np-item"><span class="ni-dot"></span> 优雅的模块化解法</div>
+            <div class="np-item"><span class="ni-dot"></span> 让 CLAUDE.md 保持精简</div>
+            <div class="np-item"><span class="ni-dot"></span> 提升团队协作效率</div>
+          </div>
+          <div class="np-cta">🚀 即将进入：技能驱动的工程化落地阶段</div>
+        </div>
+        <div class="np-arrow anim-in d3">→</div>
+      </div>
+    </div>
+
+    <!-- ============ SLIDE 26: PLACEHOLDER ============ -->
+    <div class="slide" data-idx="26">
+      <div style="display:flex;align-items:center;justify-content:center;font-size:1.2rem;color:var(--text-dim);opacity:.3;">第 26 页 · 待续</div>
+    </div>
+
+  </div><!-- /deck -->
+
+  <!-- NAV -->
+  <div class="nav" id="nav">
+    <button id="prevBtn" title="上一页">‹</button>
+    <div class="dots" id="dots"></div>
+    <div class="page-info" id="pageInfo">1 / 26</div>
+    <button id="nextBtn" title="下一页">›</button>
+  </div>
+
+  <script>
+    // ========== SNOWFLAKE GENERATOR ==========
+    (function createSnow() {
+      var field = document.getElementById('snowfield');
+      var count = 45;
+      for (var i = 0; i < count; i++) {
+        var flake = document.createElement('div');
+        flake.className = 'snowflake';
+        var size = 1.5 + Math.random() * 4;
+        var left = Math.random() * 100;
+        var dur = 10 + Math.random() * 18;
+        var sway = 3 + Math.random() * 6;
+        var delay = Math.random() * dur;
+        var opacity = 0.15 + Math.random() * 0.5;
+        flake.style.cssText =
+          'width:' + size + 'px;height:' + size + 'px;' +
+          'left:' + left + '%;' +
+          'opacity:' + opacity + ';' +
+          'animation-duration:' + dur + 's,' + sway + 's;' +
+          'animation-delay:' + delay + 's,' + (delay * 0.4) + 's;';
+        field.appendChild(flake);
+      }
+    })();
+
+    // ========== DECK ENGINE ==========
+    var slides = Array.from(document.querySelectorAll('.slide'));
+    var totalSlides = slides.length; // 26
+    var current = 0;
+
+    var dotsContainer = document.getElementById('dots');
+    var pageInfo = document.getElementById('pageInfo');
+    var prevBtn = document.getElementById('prevBtn');
+    var nextBtn = document.getElementById('nextBtn');
+
+    // Create dots
+    slides.forEach(function(_, i) {
+      var dot = document.createElement('div');
+      dot.className = 'dot' + (i === 0 ? ' active' : '');
+      dot.addEventListener('click', function() { goTo(i); });
+      dotsContainer.appendChild(dot);
+    });
+
+    function goTo(idx) {
+      if (idx < 0 || idx >= totalSlides) return;
+      slides[current].classList.remove('active');
+      current = idx;
+      slides[current].classList.add('active');
+      // Reset animations
+      slides[current].querySelectorAll('[class*="anim-"]').forEach(function(el) {
+        el.style.animation = 'none';
+        el.offsetHeight; // reflow
+        el.style.animation = '';
+      });
+      // Reset cover-specific animations
+      slides[current].querySelectorAll('.ch2-cover-title, .ch2-cover-divider').forEach(function(el) {
+        el.style.animation = 'none';
+        el.offsetHeight;
+        el.style.animation = '';
+      });
+      updateNav();
+      savePos();
+    }
+
+    function updateNav() {
+      var slideNum = current + 1;
+      pageInfo.textContent = slideNum + ' / ' + totalSlides;
+      dotsContainer.querySelectorAll('.dot').forEach(function(d, i) {
+        d.classList.toggle('active', i === current);
+      });
+    }
+
+    prevBtn.addEventListener('click', function() { goTo(current - 1); });
+    nextBtn.addEventListener('click', function() { goTo(current + 1); });
+
+    // Keyboard nav
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') {
+        e.preventDefault();
+        goTo(current + 1);
+      }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        goTo(current - 1);
+      }
+      if (e.key === 'Home') { e.preventDefault(); goTo(0); }
+      if (e.key === 'End')  { e.preventDefault(); goTo(totalSlides - 1); }
+    });
+
+    // Persist position
+    function savePos() {
+      try { localStorage.setItem('chapter2-slide', current); } catch(e) {}
+    }
+    function loadPos() {
+      try {
+        var saved = parseInt(localStorage.getItem('chapter2-slide'), 10);
+        if (!isNaN(saved) && saved >= 0 && saved < totalSlides) {
+          goTo(saved);
+          return true;
+        }
+      } catch(e) {}
+      return false;
+    }
+
+    // Responsive scale
+    function rescale() {
+      var deck = document.getElementById('deck');
+      var padX = 40, padY = 120;
+      var scale = Math.min(
+        (window.innerWidth - padX) / 1920,
+        (window.innerHeight - padY) / 1080
+      );
+      deck.style.transform = 'scale(' + (scale * 1.15) + ')';
+    }
+    window.addEventListener('resize', rescale);
+    rescale();
+
+    // Init — show slide 1 (cover), restore saved position if any
+    if (!loadPos()) goTo(0);
+  </script>
+</body>
+</html>
