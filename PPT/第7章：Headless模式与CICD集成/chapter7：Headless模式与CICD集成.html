@@ -1,0 +1,1229 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1920">
+<title>Chapter 7 · Headless 模式与 CI/CD 集成</title>
+<style>
+/* ===== 基础样式 ===== */
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Noto+Sans+SC:wght@300;400;500;700&family=JetBrains+Mono:wght@300;400;500&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --gold:#FFD700;--cyan:#00F3FF;--magenta:#FF00C8;--red:#FF4D4D;
+  --green:#00C878;--purple:#B482FF;--dark:#0A0A0A;--dark-card:rgba(15,15,20,0.85);
+  --grid:rgba(40,40,40,0.4);--text:#E8E8E8;--text-dim:rgba(255,255,255,0.55);
+  --gold-glow:rgba(255,215,0,0.6);--cyan-glow:rgba(0,243,255,0.6);--magenta-glow:rgba(255,0,200,0.6);
+}
+body{
+  background:var(--dark);color:#fff;
+  font-family:'Inter','Noto Sans SC','JetBrains Mono',sans-serif;
+  font-size:18px;line-height:1.7;
+  overflow:hidden;height:100vh;
+  display:flex;justify-content:center;align-items:center;
+}
+/* ===== 背景 ===== */
+body::before{
+  content:"";position:fixed;inset:0;
+  background:
+    linear-gradient(rgba(40,40,40,0.4) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(40,40,40,0.4) 1px,transparent 1px);
+  background-size:32px 32px;z-index:0;
+  animation:gridPulse 6s infinite alternate;
+}
+@keyframes gridPulse{0%{opacity:0.6}100%{opacity:0.85}}
+/* ===== 雪花 ===== */
+#snowfield{position:fixed;inset:0;z-index:1;pointer-events:none;overflow:hidden}
+.snowflake{
+  position:absolute;color:rgba(255,255,255,0.25);font-size:1em;
+  pointer-events:none;user-select:none;
+  animation:snowfall linear infinite;
+}
+@keyframes snowfall{
+  0%{top:-5%;transform:rotate(0deg);opacity:1}
+  100%{top:105%;transform:rotate(360deg);opacity:0.2}
+}
+/* ===== 幻灯片容器 ===== */
+.deck{
+  position:relative;width:1920px;height:1080px;
+  margin:0 auto;z-index:2;
+}
+.slide{
+  position:absolute;top:0;left:0;width:100%;height:100%;
+  display:none;flex-direction:column;
+  align-items:center;justify-content:center;
+  padding:80px 120px 100px;text-align:center;
+  overflow:hidden;
+}
+.slide.active{display:flex !important}
+.slide:not(.active){display:none !important}
+/* ===== 内容区 ===== */
+.content{
+  flex:1;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:30px;
+  width:100%;
+}
+/* ===== 封面 ===== */
+.cover{textalign:center;justify-content:center;align-items:center}
+.cover .chap{
+  font-family:'Orbitron',sans-serif;font-size:1.3rem;
+  color:rgba(255,255,255,0.45);letter-spacing:6px;margin-bottom:20px;
+}
+.cover h1{
+  font-family:'Orbitron',sans-serif;font-size:4rem;font-weight:800;
+  color:#fff;text-shadow:0 0 60px rgba(255,215,0,0.3);
+  line-height:1.3;margin-bottom:10px;
+}
+.cover h1 span{
+  background:linear-gradient(135deg,#fff 0%,#fff 60%,rgba(255,215,0,0.8) 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+}
+.cover .sub{
+  font-family:'Orbitron',sans-serif;font-size:1.8rem;
+  color:var(--gold);font-weight:700;margin-top:10px;
+}
+.cover .en{
+  font-family:'Orbitron',sans-serif;font-size:1rem;
+  color:rgba(255,255,255,0.2);margin-top:15px;
+  text-transform:uppercase;letter-spacing:4px;
+}
+/* ===== 标题 ===== */
+.slide-title{
+  font-family:'Orbitron',sans-serif;font-size:2.4rem;
+  color:var(--gold);text-align:center;font-weight:700;
+  text-shadow:0 0 30px rgba(255,215,0,0.3);margin-bottom:10px;
+}
+.slide-sub{
+  font-size:1.1rem;color:rgba(255,255,255,0.5);
+  text-align:center;margin-top:-15px;margin-bottom:10px;
+}
+/* ===== 双栏 ===== */
+.dual-col{display:grid;grid-template-columns:1fr 1fr;gap:30px}
+/* ===== 卡片 ===== */
+.card{
+  background:var(--dark-card);border-radius:16px;
+  padding:28px 32px;border:1px solid rgba(255,215,0,0.1);
+}
+.card-cyan{border-color:rgba(0,243,255,0.2)}
+.card-gold{border-color:rgba(255,215,0,0.2)}
+.card-red{border-color:rgba(255,77,77,0.2)}
+.card-green{border-color:rgba(0,200,120,0.2)}
+.card-purple{border-color:rgba(180,130,255,0.2)}
+.card h3{
+  font-family:'Orbitron',sans-serif;font-size:1.2rem;
+  color:var(--gold);margin-bottom:12px;font-weight:600;
+}
+.card p{font-size:1rem;color:rgba(255,255,255,0.8);line-height:1.7}
+.card-header{
+  font-family:'Orbitron',sans-serif;font-size:1rem;
+  color:var(--cyan);font-weight:600;margin-bottom:10px;
+}
+/* ===== 项目符号 ===== */
+.bullet-item{
+  display:flex;align-items:flex-start;gap:12px;
+  margin-bottom:10px;font-size:1rem;
+}
+.bullet-dot{
+  width:10px;height:10px;border-radius:50%;
+  background:var(--gold);margin-top:8px;flex-shrink:0;
+}
+/* ===== 标签 ===== */
+.pill{
+  display:inline-block;padding:4px 14px;border-radius:20px;
+  font-size:0.85rem;font-weight:600;margin-bottom:10px;
+}
+.pill-cyan{background:rgba(0,243,255,0.15);color:var(--cyan)}
+.pill-gold{background:rgba(255,215,0,0.15);color:var(--gold)}
+.pill-green{background:rgba(0,200,120,0.15);color:var(--green)}
+.pill-red{background:rgba(255,77,77,0.15);color:var(--red)}
+.pill-purple{background:rgba(180,130,255,0.15);color:var(--purple)}
+/* ===== 三栏 ===== */
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+/* ===== 流程箭头 ===== */
+.flow-arrow{
+  font-family:'Orbitron',sans-serif;font-size:1.5rem;
+  color:var(--gold);text-align:center;margin:5px 0;
+}
+/* ===== 底部引语 ===== */
+.bottom-quote{
+  font-size:1rem;color:rgba(255,255,255,0.4);
+  text-align:center;font-style:italic;margin-top:10px;
+  padding-top:15px;
+}
+/* ===== 指标 ===== */
+.metric{
+  font-family:'Orbitron',sans-serif;font-size:2.5rem;
+  font-weight:800;color:var(--gold);text-align:center;
+}
+.metric-label{
+  font-size:1rem;color:rgba(255,255,255,0.6);
+  text-align:center;margin-top:5px;
+}
+/* ===== 代码块 ===== */
+.code-block{
+  background:rgba(10,10,10,0.9);border:1px solid rgba(255,215,0,0.1);
+  border-radius:10px;padding:18px 22px;
+  font-family:'JetBrains Mono',monospace;font-size:0.9rem;
+  color:#e0e0e0;line-height:1.6;overflow-x:auto;white-space:pre;
+}
+/* ===== 警告框 ===== */
+.alert-box{
+  background:rgba(255,77,77,0.1);border:1px solid rgba(255,77,77,0.3);
+  border-radius:12px;padding:14px 20px;
+  font-size:1rem;color:var(--red);text-align:center;
+}
+.alert-box-green{
+  background:rgba(0,200,120,0.1);border:1px solid rgba(0,200,120,0.3);
+  border-radius:12px;padding:14px 20px;
+  font-size:1rem;color:var(--green);text-align:center;
+}
+/* ===== 统计卡 ===== */
+.stat-card{
+  background:var(--dark-card);border-radius:14px;
+  padding:20px 24px;text-align:center;
+  border:1px solid rgba(255,215,0,0.1);
+}
+.stat-card .num{
+  font-family:'Orbitron',sans-serif;font-size:2rem;
+  font-weight:800;color:var(--gold);
+}
+.stat-card .label{
+  font-size:0.95rem;color:rgba(255,255,255,0.6);margin-top:5px;
+}
+/* ===== 层卡 ===== */
+.layer-card{
+  border-radius:12px;padding:14px 20px;
+  font-size:1rem;font-weight:600;
+}
+/* ===== JSON 块 ===== */
+.json-block{
+  background:rgba(10,10,10,0.85);border-radius:10px;
+  padding:14px 18px;font-family:'JetBrains Mono',monospace;
+  font-size:0.85rem;color:var(--cyan);line-height:1.5;
+}
+/* ===== 徽标 ===== */
+.badge{
+  display:inline-block;padding:3px 10px;border-radius:6px;
+  font-size:0.8rem;font-weight:600;
+}
+.badge-blue{background:rgba(0,243,255,0.15);color:var(--cyan)}
+.badge-yellow{background:rgba(255,215,0,0.15);color:var(--gold)}
+.badge-green{background:rgba(0,200,120,0.15);color:var(--green)}
+.badge-red{background:rgba(255,77,77,0.15);color:var(--red)}
+.badge-purple{background:rgba(180,130,255,0.15);color:var(--purple)}
+/* ===== 进度条 ===== */
+.progress-bar{
+  height:8px;border-radius:4px;background:rgba(255,255,255,0.1);
+  overflow:hidden;margin:8px 0;
+}
+.progress-fill{height:100%;border-radius:4px}
+/* ===== 时间线 ===== */
+.timeline{display:flex;flex-direction:column;gap:18px}
+.timeline-node{
+  display:flex;align-items:flex-start;gap:16px;
+}
+.timeline-dot{
+  width:16px;height:16px;border-radius:50%;margin-top:4px;flex-shrink:0;
+}
+.timeline-content{flex:1}
+/* ===== 对比表 ===== */
+.compare-row{
+  display:grid;grid-template-columns:1fr 40px 1fr;
+  gap:10px;align-items:center;margin-bottom:8px;
+}
+.compare-cell{
+  background:var(--dark-card);border-radius:10px;
+  padding:10px 16px;font-size:0.95rem;
+}
+.compare-vs{
+  font-family:'Orbitron',sans-serif;font-size:0.8rem;
+  color:var(--gold);text-align:center;
+}
+/* ===== 导航 ===== */
+.nav{
+  position:fixed;bottom:30px;left:50%;transform:translateX(-50%);
+  display:flex;align-items:center;gap:20px;z-index:100;
+  background:rgba(10,10,10,0.8);border:1px solid rgba(255,255,255,0.1);
+  border-radius:40px;padding:10px 28px;backdrop-filter:blur(10px);
+}
+.nav button{
+  background:none;border:1px solid rgba(255,255,255,0.2);
+  color:#fff;width:40px;height:40px;border-radius:50%;
+  cursor:pointer;font-size:1.1rem;
+  display:flex;align-items:center;justify-content:center;
+  transition:all 0.2s;
+}
+.nav button:hover{
+  border-color:var(--cyan);color:var(--cyan);
+  box-shadow:0 0 10px rgba(0,243,255,0.6);
+}
+.nav .page-info{
+  font-family:'JetBrains Mono',monospace;font-size:0.85rem;
+  color:rgba(255,255,255,0.55);min-width:80px;text-align:center;
+}
+.nav .dots{display:flex;gap:6px}
+.nav .dot{
+  width:8px;height:8px;border-radius:50%;
+  background:rgba(255,255,255,0.2);cursor:pointer;transition:all 0.3s;
+}
+.nav .dot.active{
+  background:var(--cyan);box-shadow:0 0 8px rgba(0,243,255,0.6);
+}
+/* ===== 动画 ===== */
+@keyframes fadeInUp{from{opacity:0;transform:translateY(40px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes scaleIn{from{opacity:0;transform:scale(0.85)}to{opacity:1;transform:scale(1)}}
+@keyframes slideInLeft{from{opacity:0;transform:translateX(-40px)}to{opacity:1;transform:translateX(0)}}
+@keyframes slideInRight{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}
+.anim-up{animation:fadeInUp 0.7s ease-out both}
+.anim-in{animation:fadeIn 0.6s ease-out both}
+.anim-scale{animation:scaleIn 0.7s ease-out both}
+.anim-left{animation:slideInLeft 0.6s ease-out both}
+.anim-right{animation:slideInRight 0.6s ease-out both}
+.d1{animation-delay:0.1s}.d2{animation-delay:0.25s}.d3{animation-delay:0.4s}
+.d4{animation-delay:0.55s}.d5{animation-delay:0.7s}.d6{animation-delay:0.85s}
+.d7{animation-delay:1.0s}.d8{animation-delay:1.15s}
+</style>
+</head>
+<body>
+<div id="snowfield"></div>
+<div class="deck" id="deck">
+
+<!-- ==================== SLIDE 1 · 封面 ==================== -->
+<div class="slide cover" data-slide="0">
+  <div class="content" style="justify-content:center;align-items:center">
+    <div class="chap anim-up d1">CHAPTER · 07</div>
+    <h1 class="anim-up d2"><span>Claude Code Harness</span></h1>
+    <h1 class="anim-up d3" style="font-size:3.2rem;margin-top:-10px"><span>核心要点解析指南</span></h1>
+    <div class="sub anim-up d4">第 7 章：Headless 模式与 CI/CD 集成</div>
+    <div class="en anim-up d5">Headless Mode &amp; CI/CD Integration</div>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 2 · 章节过渡 ==================== -->
+<div class="slide" data-slide="1">
+  <div class="content">
+    <div class="slide-title anim-up d1">章节过渡</div>
+    <div class="dual-col" style="margin-top:10px">
+      <div class="card card-gold anim-up d2">
+        <div class="pill pill-gold">第六章回顾</div>
+        <h3>上一章掌握的核心</h3>
+        <div class="bullet-item"><div class="bullet-dot"></div><span>MCP 协议标准化接口</span></div>
+        <div class="bullet-item"><div class="bullet-dot"></div><span>外部系统连接能力</span></div>
+        <div class="bullet-item"><div class="bullet-dot"></div><span>数据库 / API / 工具扩展</span></div>
+        <div class="bullet-item"><div class="bullet-dot"></div><span>前提：人在屏幕前操作</span></div>
+      </div>
+      <div class="card card-cyan anim-up d3">
+        <div class="pill pill-gold">本章重点</div>
+        <h3 style="font-size:1.6rem;color:var(--gold)">Headless 模式 · CI/CD 集成</h3>
+        <p style="font-size:1.1rem;color:#fff;margin-top:8px">无人值守的自动化审查</p>
+        <div class="bottom-quote">运筹帷幄之中，决胜于千里之外</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 3 · 痛点：PR 瓶颈 ==================== -->
+<div class="slide" data-slide="2">
+  <div class="content">
+    <div class="slide-title anim-up d1">高级工程师的 PR 瓶颈</div>
+    <div class="slide-sub anim-up d2">20+ PR / 每天，审查压力与日俱增</div>
+    <div class="grid-3" style="margin-top:15px">
+      <div class="card card-red anim-up d3">
+        <h3>📋 PR 积压</h3>
+        <p>队列不断膨胀，发布周期被迫延长</p>
+      </div>
+      <div class="card card-gold anim-up d4">
+        <h3>↻ 上下文切换</h3>
+        <p>等待审查期间频繁切换，开发效率大幅下降</p>
+      </div>
+      <div class="card card-red anim-up d5">
+        <h3>⚠️ 质量下滑</h3>
+        <p>疲惫审查遗漏漏洞，缺陷流入生产环境</p>
+      </div>
+    </div>
+    <div class="alert-box anim-up d6" style="margin-top:15px">
+      🔴 高级工程师 → 待审查 PR #201 ~ #206（6个）→ 瓶颈 → 20+ PR / 每天
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 4 · Headless 概念 ==================== -->
+<div class="slide" data-slide="3">
+  <div class="content">
+    <div class="slide-title anim-up d1">核心概念 · Headless 模式</div>
+    <div style="display:flex;gap:20px;align-items:stretch;margin-top:10px">
+      <!-- 流程 -->
+      <div class="card card-cyan anim-up d2" style="flex:1">
+        <div class="pill pill-cyan">📌 流程</div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center;margin:15px 0">
+          <span class="badge badge-blue">PR 提交</span>
+          <span style="color:var(--gold)">→</span>
+          <span class="badge badge-yellow">Claude 初审</span>
+          <span style="color:var(--gold)">→</span>
+          <span class="badge badge-blue">人工终审</span>
+          <span style="color:var(--gold)">→</span>
+          <span class="badge badge-green">Merge</span>
+        </div>
+        <div class="bullet-item"><div class="bullet-dot" style="background:var(--cyan)"></div><span>Claude 初审：安全 / 质量 / 覆盖率</span></div>
+        <div class="bullet-item"><div class="bullet-dot" style="background:var(--cyan)"></div><span>人工终审：业务逻辑 / 架构设计</span></div>
+      </div>
+      <!-- 终端 -->
+      <div class="card card-gold anim-up d3" style="flex:1">
+        <div class="pill pill-gold">💡 核心定义</div>
+        <p style="margin:10px 0">通过 <code style="color:var(--cyan)">-p</code> 参数，告诉 Claude 这是一次 <strong style="color:var(--gold)">非交互</strong> 调用</p>
+        <p>任务完成 → 直接输出结果并退出，无需人工输入</p>
+        <div class="code-block" style="margin-top:15px">$ claude -p "Review this PR for security issues"</div>
+        <div style="display:flex;gap:20px;margin-top:10px">
+          <span style="color:var(--green)">✓ 非交互</span>
+          <span style="color:var(--green)">✓ 自动执行</span>
+          <span style="color:var(--green)">✓ 直接输出</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 5 · 交互 vs Headless ==================== -->
+<div class="slide" data-slide="4">
+  <div class="content">
+    <div class="slide-title anim-up d1">交互模式 vs Headless 模式</div>
+    <table style="width:100%;border-collapse:separate;border-spacing:0 8px;margin-top:10px">
+      <thead>
+        <tr>
+          <th style="width:16%;font-family:'Orbitron';font-size:1rem;color:var(--gold);padding:8px 16px;text-shadow:0 0 10px rgba(255,215,0,0.5)">维度</th>
+          <th style="width:38%;text-align:center;padding:8px"><span class="pill pill-cyan" style="font-size:1rem;padding:6px 24px">🔵 交互模式</span></th>
+          <th style="width:10%"></th>
+          <th style="width:36%;text-align:center;padding:8px"><span class="pill pill-gold" style="font-size:1rem;padding:6px 24px">🟡 Headless 模式</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="anim-up d1">
+          <td style="font-size:1.1rem;color:var(--text-dim);padding:10px 16px;font-weight:600">界面</td>
+          <td style="background:var(--dark-card);border-radius:10px 0 0 10px;padding:12px 20px;font-size:1.1rem;text-align:center">🖥️ 终端 TUI 界面</td>
+          <td style="background:rgba(255,215,0,0.08);text-align:center;font-family:'Orbitron';font-size:0.8rem;color:var(--gold)">VS</td>
+          <td style="background:var(--dark-card);border-radius:0 10px 10px 0;padding:12px 20px;font-size:1.1rem;text-align:center">无界面，仅 stdout</td>
+        </tr>
+        <tr class="anim-up d2">
+          <td style="font-size:1.1rem;color:var(--text-dim);padding:10px 16px;font-weight:600">输入方式</td>
+          <td style="background:var(--dark-card);border-radius:10px 0 0 10px;padding:12px 20px;font-size:1.1rem;text-align:center">💬 多轮对话交互</td>
+          <td style="background:rgba(255,215,0,0.08);text-align:center;font-family:'Orbitron';font-size:0.8rem;color:var(--gold)">VS</td>
+          <td style="background:var(--dark-card);border-radius:0 10px 10px 0;padding:12px 20px;font-size:1.1rem;text-align:center">一次性 Prompt / 管道</td>
+        </tr>
+        <tr class="anim-up d3">
+          <td style="font-size:1.1rem;color:var(--text-dim);padding:10px 16px;font-weight:600">权限处理</td>
+          <td style="background:var(--dark-card);border-radius:10px 0 0 10px;padding:12px 20px;font-size:1.1rem;text-align:center">🔐 人工确认弹窗</td>
+          <td style="background:rgba(255,215,0,0.08);text-align:center;font-family:'Orbitron';font-size:0.8rem;color:var(--gold)">VS</td>
+          <td style="background:var(--dark-card);border-radius:0 10px 10px 0;padding:12px 20px;font-size:1.1rem;text-align:center">自动跳过 / 白名单执行</td>
+        </tr>
+        <tr class="anim-up d4">
+          <td style="font-size:1.1rem;color:var(--text-dim);padding:10px 16px;font-weight:600">会话管理</td>
+          <td style="background:var(--dark-card);border-radius:10px 0 0 10px;padding:12px 20px;font-size:1.1rem;text-align:center">💾 自动保存会话</td>
+          <td style="background:rgba(255,215,0,0.08);text-align:center;font-family:'Orbitron';font-size:0.8rem;color:var(--gold)">VS</td>
+          <td style="background:var(--dark-card);border-radius:0 10px 10px 0;padding:12px 20px;font-size:1.1rem;text-align:center">默认不保存</td>
+        </tr>
+        <tr class="anim-up d5">
+          <td style="font-size:1.1rem;color:var(--text-dim);padding:10px 16px;font-weight:600">人类角色</td>
+          <td style="background:var(--dark-card);border-radius:10px 0 0 10px;padding:12px 20px;font-size:1.1rem;text-align:center">👤 审批者+检查者+控制者</td>
+          <td style="background:rgba(255,215,0,0.08);text-align:center;font-family:'Orbitron';font-size:0.8rem;color:var(--gold)">VS</td>
+          <td style="background:var(--dark-card);border-radius:0 10px 10px 0;padding:12px 20px;font-size:1.1rem;text-align:center;color:var(--red)">❌ 完全缺席</td>
+        </tr>
+        <tr class="anim-up d6">
+          <td style="font-size:1.1rem;color:var(--text-dim);padding:10px 16px;font-weight:600">规则载体</td>
+          <td style="background:var(--dark-card);border-radius:10px 0 0 10px;padding:12px 20px;font-size:1.1rem;text-align:center">🧠 实时人工判断</td>
+          <td style="background:rgba(255,215,0,0.08);text-align:center;font-family:'Orbitron';font-size:0.8rem;color:var(--gold)">VS</td>
+          <td style="background:var(--dark-card);border-radius:0 10px 10px 0;padding:12px 20px;font-size:1.1rem;text-align:center">参数硬编码预设</td>
+        </tr>
+        <tr class="anim-up d7">
+          <td style="font-size:1.1rem;color:var(--text-dim);padding:10px 16px;font-weight:600">适用场景</td>
+          <td style="background:var(--dark-card);border-radius:10px 0 0 10px;padding:12px 20px;font-size:1.1rem;text-align:center">🛠️ 开发 / 调试 / 探索</td>
+          <td style="background:rgba(255,215,0,0.08);text-align:center;font-family:'Orbitron';font-size:0.8rem;color:var(--gold)">VS</td>
+          <td style="background:var(--dark-card);border-radius:0 10px 10px 0;padding:12px 20px;font-size:1.1rem;text-align:center">CI/CD / 自动化 / 批处理</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="alert-box anim-up d8" style="margin-top:10px">⚠️ 人类三重角色（<span style="color:var(--green)">权限审批者</span> / <span style="color:var(--cyan)">质量检查者</span> / <span style="color:var(--gold)">流程控制者</span>）→ Headless 下全部缺席 → 必须预先硬编码</div>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 6 · 四维参数体系 ==================== -->
+<div class="slide" data-slide="5">
+  <div class="content">
+    <div class="slide-title anim-up d1">四维参数体系</div>
+    <div class="grid-2" style="margin-top:15px">
+      <div class="card card-cyan anim-up d2">
+        <h3>📄 输出格式</h3>
+        <div class="code-block" style="font-size:0.85rem">output-format</div>
+        <p style="margin-top:8px">下游消费协议</p>
+      </div>
+      <div class="card card-gold anim-up d3">
+        <h3>🎙️ 成本护栏</h3>
+        <div class="code-block" style="font-size:0.85rem">max-turns / max-budget-usd</div>
+        <p style="margin-top:8px">防止无人值守预算失控</p>
+      </div>
+      <div class="card card-green anim-up d4">
+        <h3>🛡️ 安全边界</h3>
+        <div class="code-block" style="font-size:0.85rem">allowedTools / disabledTools</div>
+        <p style="margin-top:8px">严格限定工具权限确保合规</p>
+      </div>
+      <div class="card card-purple anim-up d5">
+        <h3>⚙️ 执行控制</h3>
+        <div class="code-block" style="font-size:0.85rem">model / system-prompt</div>
+        <p style="margin-top:8px">模型选择与 Prompt 定制</p>
+      </div>
+    </div>
+    <div class="bottom-quote anim-up d6">📌 生产级无人值守调用，必须在四个维度上做出明确决策</div>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 7 · 输出格式 ==================== -->
+<div class="slide" data-slide="6">
+  <div class="content">
+    <div class="slide-title anim-up d1">输出格式 · output-format</div>
+    <div class="grid-3" style="margin-top:10px">
+      <div class="card card-cyan anim-up d2">
+        <h3 style="color:var(--cyan)">T text</h3>
+        <p style="color:var(--cyan);font-size:0.9rem;margin-bottom:8px">纯文本流</p>
+        <div class="code-block" style="font-size:0.8rem">$ claude -p "review" --output-format text
+→ The code looks clean...
+Found 2 potential issues.</div>
+        <div style="text-align:center;margin-top:10px"><span class="badge badge-green">✅ 人类阅读</span></div>
+      </div>
+      <div class="card card-gold anim-up d3">
+        <h3 style="color:var(--gold)">&lt;&gt; json</h3>
+        <p style="color:var(--gold);font-size:0.9rem;margin-bottom:8px">结构化对象</p>
+        <div class="json-block" style="font-size:0.78rem">{
+  "session_id": "abc...",
+  "result": "...",
+  "duration_ms": 4200,
+  "cost_usd": 0.03
+}</div>
+        <div style="text-align:center;margin-top:10px"><span class="badge badge-yellow">✅ 机器解析</span></div>
+      </div>
+      <div class="card card-green anim-up d4">
+        <h3 style="color:var(--green)">~ stream-json</h3>
+        <p style="color:var(--green);font-size:0.9rem;margin-bottom:8px">逐行事件流</p>
+        <div class="code-block" style="font-size:0.78rem">init     session started
+tool_use Read file.ts
+tool_result ok
+assistant reviewing...
+result   complete</div>
+        <div style="text-align:center;margin-top:10px"><span class="badge badge-green">✅ 实时监控</span></div>
+      </div>
+    </div>
+    <div class="bottom-quote anim-up d5">📌 使用原则：人看用 text｜机器解析用 json｜实时监控用 stream-json</div>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 8 · 成本护栏 ==================== -->
+<div class="slide" data-slide="7">
+  <div class="content">
+    <div class="slide-title anim-up d1">成本护栏 · 双保险</div>
+    <div class="dual-col" style="margin-top:10px">
+      <div class="card card-cyan anim-up d2">
+        <div class="pill pill-cyan">🔵 max-turns</div>
+        <div class="code-block" style="font-size:0.85rem;margin:10px 0">$ claude -p "review" --max-turns 6</div>
+        <p>限制交互轮数（例：5 文件 + 结论 = 6 轮）</p>
+        <p style="margin-top:8px">轮数耗尽 → 输出已有结论</p>
+        <div class="progress-bar" style="margin-top:15px">
+          <div class="progress-fill" style="width:60%;background:var(--cyan)"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:0.85rem;color:rgba(255,255,255,0.5)">
+          <span>0 turns</span><span>6 / 10 turns</span>
+        </div>
+      </div>
+      <div class="card card-gold anim-up d3">
+        <div class="pill pill-gold">🟡 max-budget-usd</div>
+        <div class="code-block" style="font-size:0.85rem;margin:10px 0">$ claude -p "review" --max-budget-usd 1.0</div>
+        <p>硬性金额上限（防 Token 累积超支）</p>
+        <p style="margin-top:8px">预算触发 → 立即强制停止</p>
+        <div class="progress-bar" style="margin-top:15px">
+          <div class="progress-fill" style="width:75%;background:var(--gold)"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:0.85rem;color:rgba(255,255,255,0.5)">
+          <span>$0</span><span>limit $1.0</span>
+        </div>
+      </div>
+    </div>
+    <div class="alert-box anim-up d4">⚠️ 强制要求：生产环境务必同时配置，两道防线缺一不可</div>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 9 · 安全边界 allowedTools ==================== -->
+<div class="slide" data-slide="8">
+  <div class="content">
+    <div class="slide-title anim-up d1">安全边界 · allowedTools</div>
+    <div class="dual-col" style="margin-top:10px">
+      <div class="card card-green anim-up d2">
+        <div class="pill pill-green">✅ 白名单 allowedTools · 推荐</div>
+        <p style="margin-bottom:10px">仅允许明确列出的工具，其余一律拒绝</p>
+        <div class="bullet-item"><span style="color:var(--green);margin-right:8px">✓</span><span>Read — 只读文件</span></div>
+        <div class="bullet-item"><span style="color:var(--green);margin-right:8px">✓</span><span>Grep — 搜索内容</span></div>
+        <div class="bullet-item"><span style="color:var(--green);margin-right:8px">✓</span><span>Bash(git log *) — 模式匹配</span></div>
+        <div class="bullet-item"><span style="color:var(--green);margin-right:8px">✓</span><span>Glob — 文件查找</span></div>
+      </div>
+      <div class="card card-red anim-up d3">
+        <div class="pill pill-red">🚫 黑名单 disabledTools · 慎用</div>
+        <p style="margin-bottom:10px">除禁止工具外，其余均可使用</p>
+        <div class="bullet-item"><span style="color:var(--red);margin-right:8px">×</span><span>Edit — 禁止编辑</span></div>
+        <div class="bullet-item"><span style="color:var(--red);margin-right:8px">×</span><span>Write — 禁止写入</span></div>
+        <div class="bullet-item"><span style="color:var(--red);margin-right:8px">×</span><span>Bash(rm *) — 禁止删除</span></div>
+        <div style="margin-top:10px;color:var(--red);font-size:0.9rem">→ 未列出的工具均可使用 · 风险较高</div>
+      </div>
+    </div>
+    <div class="alert-box anim-up d4">
+      ⚠️ 严令禁止：<code>dangerously-skip-permissions</code> — 切勿忽视名称中的 <strong>dangerously</strong>，严禁在生产 CI 中使用
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 10 · 执行控制 ==================== -->
+<div class="slide" data-slide="9">
+  <div class="content">
+    <div class="slide-title anim-up d1">执行控制 · 三大维度</div>
+    <div class="grid-3" style="margin-top:10px">
+      <div class="card card-cyan anim-up d2">
+        <h3>🔀 模型选择</h3>
+        <div class="bullet-item"><div class="bullet-dot" style="background:var(--cyan)"></div><span><strong>Haiku</strong> — 快速 / 低成本 / 简单任务</span></div>
+        <div class="bullet-item"><div class="bullet-dot" style="background:var(--cyan)"></div><span><strong>Sonnet</strong> — 深度分析 / 复杂推理</span></div>
+        <div style="margin-top:10px;padding:8px 12px;background:rgba(0,243,255,0.1);border-radius:8px;font-size:0.9rem">
+          <code>--fallback-model</code><br>主模型过载时自动降级
+        </div>
+      </div>
+      <div class="card card-gold anim-up d3">
+        <h3>📄 System Prompt</h3>
+        <div class="bullet-item"><span style="color:var(--green);margin-right:8px">✅</span><span><code>--append-system-prompt</code> 推荐</span></div>
+        <p style="font-size:0.9rem;margin-left:22px;margin-bottom:8px">追加约束，保留基础能力</p>
+        <div class="bullet-item"><span style="color:var(--red);margin-right:8px">❌</span><span><code>--system-prompt</code> 覆盖</span></div>
+        <p style="font-size:0.9rem;margin-left:22px">彻底替换默认行为，极易导致工具调用失败</p>
+        <div style="margin-top:10px;color:var(--gold);font-size:0.9rem;text-align:center">追加 = 增强｜覆盖 = 风险</div>
+      </div>
+      <div class="card card-purple anim-up d4">
+        <h3>&lt;&gt; 结构化输出</h3>
+        <div class="code-block" style="font-size:0.8rem;margin:8px 0">--json-schema</div>
+        <p style="font-size:0.9rem">强制验证输出 JSON 格式</p>
+        <div style="margin-top:10px;display:flex;align-items:center;gap:8px;font-size:0.85rem;justify-content:center">
+          <span class="badge badge-purple">Claude 输出 JSON</span>
+          <span style="color:var(--gold)">→</span>
+          <span class="badge badge-purple">Schema 验证</span>
+          <span style="color:var(--gold)">→</span>
+          <span style="display:flex;flex-direction:column;align-items:center;gap:4px">
+            <span class="badge badge-green">✓ 通过 → 输出</span>
+            <span class="badge badge-red">✗ 不符 → 重试</span>
+          </span>
+        </div>
+        <div style="font-size:0.85rem;color:rgba(255,255,255,0.5);margin-top:5px">确保下游系统能直接消费</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 11 · Unix 管道 ==================== -->
+<div class="slide" data-slide="10">
+  <div class="content">
+    <div class="slide-title anim-up d1">Unix 管道 · 无缝集成</div>
+    <div style="display:flex;flex-direction:column;gap:18px;margin-top:15px">
+      <div class="card card-cyan anim-up d2" style="display:flex;align-items:center;gap:20px">
+        <span style="font-size:1.8rem">📄</span>
+        <div class="code-block" style="flex:1;font-size:0.9rem;margin:0">cat error.log  │  claude -p "分析错误"</div>
+        <span class="badge badge-blue">日志分析</span>
+      </div>
+      <div class="card card-green anim-up d3" style="display:flex;align-items:center;gap:20px">
+        <span style="font-size:1.8rem">🐙</span>
+        <div class="code-block" style="flex:1;font-size:0.9rem;margin:0">git diff       │  claude -p "总结变更"</div>
+        <span class="badge badge-green">变更摘要</span>
+      </div>
+      <div class="card card-purple anim-up d4" style="display:flex;align-items:center;gap:20px">
+        <span style="font-size:1.8rem">🛡️</span>
+        <div class="code-block" style="flex:1;font-size:0.9rem;margin:0">claude -p "分析" --output-format json  │  jq '.result'</div>
+        <span class="badge badge-purple">结构化提取</span>
+      </div>
+    </div>
+    <div style="background:rgba(255,215,0,0.08);border:1px solid rgba(255,215,0,0.2);border-radius:12px;padding:14px 24px;text-align:center;margin-top:20px" class="anim-up d5">
+      <span style="color:var(--gold);font-size:1.1rem;font-weight:600">💡 优势互补：模式匹配 + 语义分析 = 高效自动化</span>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 12 · GitHub Actions ==================== -->
+<div class="slide" data-slide="11">
+  <div class="content">
+    <div class="slide-title anim-up d1">GitHub Actions · 官方 Action</div>
+    <div class="code-block anim-up d2" style="font-size:0.9rem;margin-top:10px;text-align:left;display:inline-block"><span style="color:var(--cyan)">uses</span>: <span style="color:var(--gold)">anthropics/claude-code-action@v1</span>
+<span style="color:var(--cyan)">with</span>:
+  <span style="color:var(--cyan)">mode</span>: <span style="color:var(--green)">agent</span> <span style="color:var(--text-dim)">|</span> <span style="color:var(--green)">tag</span>                <span style="color:var(--text-dim)"># 触发模式</span>
+  <span style="color:var(--cyan)">claude_args</span>: <span style="color:var(--green)">"--max-turns 3 --model sonnet"</span>
+  <span style="color:var(--cyan)">concurrency</span>:
+    <span style="color:var(--cyan)">group</span>: <span style="color:var(--gold)">claude-${{ github.event.pull_request.number }}</span>
+  <span style="color:var(--cyan)">cancel-in-progress</span>: <span style="color:var(--magenta)">true</span>        <span style="color:var(--text-dim)"># 防重复执行</span></div>
+    <div class="dual-col" style="margin-top:15px">
+      <div class="card card-cyan anim-up d3">
+        <div class="pill pill-cyan">🔹 Agent 模式</div>
+        <p>PR 创建或更新时，自动执行预设审查任务</p>
+      </div>
+      <div class="card card-gold anim-up d4">
+        <div class="pill pill-gold">🔸 Tag 模式</div>
+        <p>评论中 <code>@claude</code> 触发，交互式智能响应</p>
+      </div>
+    </div>
+    <div class="alert-box-green anim-up d5">
+      ✅ 最佳实践：<code>cancel-in-progress: true</code> → 同一 PR 连续推送时自动取消旧任务，节省 API 费用
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 13 · 直接 CLI ==================== -->
+<div class="slide" data-slide="12">
+  <div class="content">
+    <div class="slide-title anim-up d1">直接 CLI · 三项能力</div>
+    <div class="dual-col" style="margin-top:10px">
+      <div style="display:flex;flex-direction:column;gap:18px">
+        <div class="card card-gold anim-up d2">
+          <h3>💰 成本透明化</h3>
+          <p>每次审查费用直接显示在 PR 评论中</p>
+        </div>
+        <div class="card card-green anim-up d3">
+          <h3>🛡️ 质量门禁</h3>
+          <p>Critical 级别问题阻塞合并</p>
+        </div>
+        <div class="card card-cyan anim-up d4">
+          <h3>🗂️ 路径过滤</h3>
+          <p>仅 <code>src/</code> 目录变更时触发</p>
+        </div>
+      </div>
+      <div class="card card-purple anim-up d5">
+        <div class="pill pill-purple">📌 CI/CD 最佳实践</div>
+        <div class="code-block" style="font-size:0.85rem;margin:12px 0">env:
+  CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"</div>
+        <div style="margin-top:12px">
+          <div style="color:var(--red);font-weight:600;margin-bottom:8px">❌ 禁用项：</div>
+          <div class="bullet-item"><span style="color:var(--red);margin-right:8px">×</span><span>自动更新</span></div>
+          <div class="bullet-item"><span style="color:var(--red);margin-right:8px">×</span><span>遥测上报</span></div>
+          <div class="bullet-item"><span style="color:var(--red);margin-right:8px">×</span><span>错误上报</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 14 · 多阶段流水线 ==================== -->
+<div class="slide" data-slide="13">
+  <div class="content">
+    <div class="slide-title anim-up d1">多阶段 AI 流水线</div>
+    <div style="display:flex;flex-direction:column;gap:20px;margin-top:15px">
+      <div class="card card-cyan anim-up d2" style="text-align:center">
+        <div class="pill pill-cyan">📁 Stage 1：格式检查</div>
+        <div style="display:flex;justify-content:center;gap:30px;margin-top:10px">
+          <span class="badge badge-blue">Haiku</span>
+          <span class="badge badge-yellow">$0.05</span>
+          <span class="badge badge-blue">3 turns</span>
+        </div>
+      </div>
+      <div style="text-align:center;color:var(--gold);font-size:1.5rem" class="anim-up d3">↓ <code style="font-size:0.9rem;color:var(--cyan)">needs: format-check</code> ↓</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+        <div class="card card-green anim-up d4" style="text-align:center">
+          <div class="pill pill-green">🛡️ Stage 2：安全扫描</div>
+          <div style="display:flex;justify-content:center;gap:15px;margin-top:10px">
+            <span class="badge badge-yellow">Sonnet</span>
+            <span class="badge badge-yellow">$1.00</span>
+          </div>
+          <p style="font-size:0.9rem;margin-top:8px">OWASP Top 10 + json-schema 结构化漏洞报告</p>
+        </div>
+        <div class="card card-purple anim-up d5" style="text-align:center">
+          <div class="pill pill-purple">📈 Stage 3：覆盖分析</div>
+          <div style="display:flex;justify-content:center;gap:15px;margin-top:10px">
+            <span class="badge badge-yellow">Sonnet</span>
+            <span class="badge badge-yellow">$0.50</span>
+          </div>
+          <p style="font-size:0.9rem;margin-top:8px">测试覆盖率分析与报告</p>
+        </div>
+      </div>
+    </div>
+    <div class="bottom-quote anim-up d6">⚡ Stage 2 与 Stage 3 无相互依赖 → GitHub Actions 自动并行执行</div>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 15 · stream-json ==================== -->
+<div class="slide" data-slide="14">
+  <div class="content">
+    <div class="slide-title anim-up d1">stream-json · 事件协议</div>
+    <div class="timeline" style="margin-top:20px">
+      <div class="timeline-node anim-up d2">
+        <div class="timeline-dot" style="background:var(--cyan)"></div>
+        <div class="card card-cyan" style="flex:1">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span class="badge badge-blue">🔵 system</span>
+            <span style="color:var(--cyan);font-weight:600">初始化</span>
+          </div>
+          <p style="margin-top:6px">模型版本、可用工具等环境信息</p>
+        </div>
+      </div>
+      <div class="timeline-node anim-up d3">
+        <div class="timeline-dot" style="background:var(--gold)"></div>
+        <div class="card card-gold" style="flex:1">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span class="badge badge-yellow">🟡 assistant</span>
+            <span style="color:var(--gold);font-weight:600">内容</span>
+          </div>
+          <p style="margin-top:6px">Claude 生成的文本回复</p>
+        </div>
+      </div>
+      <div class="timeline-node anim-up d4">
+        <div class="timeline-dot" style="background:var(--green)"></div>
+        <div class="card card-green" style="flex:1">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span class="badge badge-green">🟢 result</span>
+            <span style="color:var(--green);font-weight:600">总结</span>
+          </div>
+          <p style="margin-top:6px">总轮数、费用等统计信息</p>
+        </div>
+      </div>
+      <div class="timeline-node anim-up d5">
+        <div class="timeline-dot" style="background:var(--red)"></div>
+        <div class="card card-red" style="flex:1">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span class="badge badge-red">🔴 compact_boundary</span>
+            <span style="color:var(--red);font-weight:600">警告</span>
+          </div>
+          <p style="margin-top:6px">上下文压缩中 — 注意潜在信息丢失</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 16 · 会话管理 ==================== -->
+<div class="slide" data-slide="15">
+  <div class="content">
+    <div class="slide-title anim-up d1">会话管理 · 四种模式</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:15px">
+      <div class="card anim-up d2" style="border-color:rgba(255,255,255,0.15)">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:1.4rem;margin-bottom: 12px">⚪</span>
+          <h3 style="color:#fff">default · 无状态</h3>
+        </div>
+        <p style="margin-top:8px">每次调用全新上下文，不保存会话</p>
+      </div>
+      <div class="card card-cyan anim-up d3">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:1.4rem;margin-bottom: 12px">🔵</span>
+          <h3 style="color:var(--cyan)">resume · 指定续接</h3>
+        </div>
+        <p style="margin-top:8px">通过 <code>session_id</code> 载入完整状态</p>
+        <div class="code-block" style="font-size:0.8rem;margin-top:8px">session_id: abc123</div>
+      </div>
+      <div class="card card-green anim-up d4">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:1.4rem;margin-bottom: 12px">🟢</span>
+          <h3 style="color:var(--green)">continue · 自动续接</h3>
+        </div>
+        <p style="margin-top:8px">自动连接最近会话，无需查 ID</p>
+        <div class="badge badge-green" style="margin-top:8px">latest session</div>
+      </div>
+      <div class="card card-purple anim-up d5">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:1.4rem; margin-bottom: 12px;">🟣</span>
+          <h3 style="color:var(--purple)">fork · 分支模式</h3>
+        </div>
+        <div class="bullet-item"><div class="bullet-dot" style="background:var(--cyan)"></div><span>分支 A：性能优化方向</span></div>
+        <div class="bullet-item"><div class="bullet-dot" style="background:var(--gold)"></div><span>分支 B：架构重构方向</span></div>
+        <div class="bullet-item"><div class="bullet-dot" style="background:var(--red)"></div><span>分支 C：安全加固方向</span></div>
+      </div>
+    </div>
+    <div class="bottom-quote anim-up d6">📌 本质：原始会话不变 · 类似 Git 分支机制</div>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 17 · CI 环境配置 ==================== -->
+<div class="slide" data-slide="16">
+  <div class="content">
+    <div class="slide-title anim-up d1">CI 环境 · 配置清单</div>
+    <div class="dual-col" style="margin-top:10px">
+      <div class="card card-gold anim-up d2">
+        <div class="pill pill-gold">🔒 必备配置</div>
+        <div class="bullet-item"><div class="bullet-dot"></div><span><code>ANTHROPIC_API_KEY</code> — API 密钥，CI Secrets 注入</span></div>
+        <div class="bullet-item"><div class="bullet-dot"></div><span><code>CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1</code></span></div>
+        <p style="font-size:0.9rem;color:rgba(255,255,255,0.5);margin-left:22px">聚合变量，一次性禁用非必要流量</p>
+      </div>
+      <div class="card card-cyan anim-up d3">
+        <div class="pill pill-cyan">⚡ 性能调优</div>
+        <div class="bullet-item"><div class="bullet-dot" style="background:var(--cyan)"></div><span>Bash 超时：<code>120s → 300s</code></span></div>
+        <div class="bullet-item"><div class="bullet-dot" style="background:var(--cyan)"></div><span>最大输出 Token：<code>32K → 64K</code></span></div>
+        <div class="bullet-item"><div class="bullet-dot" style="background:var(--cyan)"></div><span>压缩阈值：<code>50%</code></span></div>
+      </div>
+    </div>
+    <div style="background:rgba(0,200,120,0.08);border:1px solid rgba(0,200,120,0.2);border-radius:12px;padding:14px 24px;text-align:center;margin-top:20px" class="anim-up d4">
+      <span style="color:var(--green);font-size:1rem">🛡️ <code>--strict-mcp-config</code> → MCP 服务器环境隔离，确保 CI 与本地配置互不干扰</span>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 18 · 跨平台 ==================== -->
+<div class="slide" data-slide="17">
+  <div class="content">
+    <div class="slide-title anim-up d1">跨平台 · CI/CD 集成</div>
+    <div class="slide-sub anim-up d2">Platform Agnostic — 只要支持 Node.js 即可部署</div>
+    <div class="grid-3" style="margin-top:10px">
+      <div class="card anim-up d3" style="border-color:rgba(255,165,0,0.3)">
+        <h3 style="color:#FFA500">🟠 GitLab CI</h3>
+        <div class="badge badge-red" style="margin-bottom:6px">.gitlab-ci.yml</div>
+        <div class="code-block" style="font-size:0.82rem;margin:8px 0;text-align:left"><span style="color:var(--cyan)">image</span>: <span style="color:var(--gold)">node:20</span>
+<span style="color:var(--cyan)">script</span>:
+  <span style="color:var(--green)">npm install -g</span> <span style="color:var(--gold)">@anthropic-ai/claude-code</span>
+  <span style="color:var(--cyan)">claude</span> <span style="color:var(--magenta)">--print</span> <span style="color:var(--green)">"Review this MR"</span>
+<span style="color:var(--cyan)">rules</span>:
+  <span style="color:var(--cyan)">if</span>: <span style="color:var(--gold)">$CI_PIPELINE_SOURCE</span>
+    <span style="color:var(--text-dim)">==</span> <span style="color:var(--green)">"merge_request_event"</span></div>
+      </div>
+      <div class="card card-cyan anim-up d4">
+        <h3 style="color:var(--cyan)">🔵 Jenkins</h3>
+        <div class="badge badge-blue" style="margin-bottom:6px">Declarative Pipeline</div>
+        <div class="code-block" style="font-size:0.82rem;margin:8px 0;text-align:left"><span style="color:var(--cyan)">agent</span> { <span style="color:var(--cyan)">docker</span> <span style="color:var(--green)">'node:20'</span> }
+<span style="color:var(--cyan)">environment</span> {
+  <span style="color:var(--gold)">ANTHROPIC_API_KEY</span> =
+    <span style="color:var(--cyan)">credentials</span>(<span style="color:var(--green)">'claude-key'</span>)
+}</div>
+        <div class="badge badge-blue" style="margin-top:6px">Credentials Provider 安全管理</div>
+      </div>
+      <div class="card card-gold anim-up d5">
+        <h3 style="color:var(--gold)">🟡 本地脚本</h3>
+        <div class="badge badge-yellow" style="margin-bottom:6px">Pre-commit 自检</div>
+        <div class="code-block" style="font-size:0.82rem;margin:8px 0;text-align:left"><span style="color:var(--text-dim)">#!/bin/bash</span>
+<span style="color:var(--gold)">DIFF</span>=<span style="color:var(--green)">$(</span><span style="color:var(--cyan)">git diff</span> <span style="color:var(--magenta)">--cached</span><span style="color:var(--green)">)</span>
+<span style="color:var(--cyan)">claude</span> <span style="color:var(--magenta)">--print</span> <span style="color:var(--green)">"Review: $DIFF"</span></div>
+        <div class="bullet-item" style="margin-top:6px"><span style="color:var(--green);margin-right:6px">✓</span><span>提交前自动审查</span></div>
+        <div class="bullet-item"><span style="color:var(--green);margin-right:6px">✓</span><span>轻量高效的本地自动化</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 19 · 五层纵深防御 ==================== -->
+<div class="slide" data-slide="18">
+  <div class="content">
+    <div class="slide-title anim-up d1">五层纵深防御体系</div>
+    <div class="slide-sub anim-up d2">CI/CD 中运行 Agent 的安全策略</div>
+    <div style="display:flex;gap:30px;margin-top:10px">
+      <!-- 左：风险 -->
+      <div class="card card-red anim-up d3" style="flex:0 0 280px">
+        <div class="pill pill-red">🔴 四大风险</div>
+        <div class="bullet-item"><div class="bullet-dot" style="background:var(--red)"></div><span>机密泄露</span></div>
+        <div class="bullet-item"><div class="bullet-dot" style="background:var(--red)"></div><span>破坏性操作</span></div>
+        <div class="bullet-item"><div class="bullet-dot" style="background:var(--red)"></div><span>费用失控</span></div>
+        <div class="bullet-item"><div class="bullet-dot" style="background:var(--red)"></div><span>内容污染</span></div>
+      </div>
+      <!-- 右：五层 -->
+      <div style="flex:1;display:flex;flex-direction:column;gap:10px;text-align:left">
+        <div class="layer-card anim-up d3" style="background:rgba(0,200,120,0.12);border:1px solid rgba(0,200,120,0.3);text-align:left">
+          <span style="margin-right:8px">🔒</span><span style="color:var(--green);font-weight:700">Layer 1 · 最小权限</span>
+          <span style="color:rgba(255,255,255,0.6);margin-left:15px">杜绝越权操作 — 安全基石</span>
+          <span style="float:right;font-family:'Orbitron';font-size:0.75rem;color:var(--green);opacity:0.6;letter-spacing:2px;margin-left:30px">LEAST PRIV</span>
+        </div>
+        <div class="layer-card anim-up d4" style="background:rgba(0,243,255,0.12);border:1px solid rgba(0,243,255,0.3);text-align:left">
+          <span style="margin-right:8px">🔑</span><span style="color:var(--cyan);font-weight:700">Layer 2 · Secrets 管理</span>
+          <span style="color:rgba(255,255,255,0.6);margin-left:15px">严防凭据泄露</span>
+          <span style="float:right;font-family:'Orbitron';font-size:0.75rem;color:var(--cyan);opacity:0.6;letter-spacing:2px;margin-left:30px">SECRETS</span>
+        </div>
+        <div class="layer-card anim-up d5" style="background:rgba(180,130,255,0.12);border:1px solid rgba(180,130,255,0.3);text-align:left">
+          <span style="margin-right:8px">📦</span><span style="color:var(--purple);font-weight:700">Layer 3 · 容器隔离</span>
+          <span style="color:rgba(255,255,255,0.6);margin-left:15px">阻断逃逸风险</span>
+          <span style="float:right;font-family:'Orbitron';font-size:0.75rem;color:var(--purple);opacity:0.6;letter-spacing:2px;margin-left:30px">SANDBOX</span>
+        </div>
+        <div class="layer-card anim-up d6" style="background:rgba(255,215,0,0.12);border:1px solid rgba(255,215,0,0.3);text-align:left">
+          <span style="margin-right:8px">💰</span><span style="color:var(--gold);font-weight:700">Layer 4 · 成本防护</span>
+          <span style="color:rgba(255,255,255,0.6);margin-left:15px">账单失控防线</span>
+          <span style="float:right;font-family:'Orbitron';font-size:0.75rem;color:var(--gold);opacity:0.6;letter-spacing:2px;margin-left:30px">COST</span>
+        </div>
+        <div class="layer-card anim-up d7" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);text-align:left">
+          <span style="margin-right:8px">📋</span><span style="color:rgba(255,255,255,0.8);font-weight:700">Layer 5 · 审计日志</span>
+          <span style="color:rgba(255,255,255,0.5);margin-left:15px">全程可追溯，事后审查</span>
+          <span style="float:right;font-family:'Orbitron';font-size:0.75rem;color:rgba(255,255,255,0.5);letter-spacing:2px;margin-left:30px">AUDIT</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 20 · 安全实践 ==================== -->
+<div class="slide" data-slide="19">
+  <div class="content">
+    <div class="slide-title anim-up d1">安全实践 · 四项措施</div>
+    <div class="grid-2" style="margin-top:10px">
+      <div class="card card-purple anim-up d2">
+        <h3>🔐 容器隔离</h3>
+        <div class="code-block" style="font-size:0.8rem;margin:8px 0"><span style="color:var(--cyan)">docker</span> <span style="color:var(--green)">run</span> \
+  <span style="color:var(--magenta)">--read-only</span> \
+  <span style="color:var(--magenta)">--network</span> <span style="color:var(--gold)">none</span> \
+  <span style="color:var(--text)">claude-runner</span></div>
+        <div class="bullet-item"><span style="color:var(--green);margin-right:6px">✓</span><span>只读文件系统，禁止写入</span></div>
+        <div class="bullet-item"><span style="color:var(--green);margin-right:6px">✓</span><span>无网络访问，完全沙箱化</span></div>
+      </div>
+      <div class="card card-gold anim-up d3">
+        <h3>💰 成本防护</h3>
+        <div class="bullet-item"><div class="bullet-dot"></div><span>路径过滤：仅关键目录变更触发</span></div>
+        <div class="bullet-item"><div class="bullet-dot"></div><span>并发控制：concurrency group 防重复运行</span></div>
+        <div style="margin-top:10px;color:var(--gold);font-size:0.9rem">→ 从源头避免不必要触发</div>
+      </div>
+      <div class="card card-red anim-up d4">
+        <h3>⚠️ Secrets 管理</h3>
+        <div style="background:rgba(255,77,77,0.1);border-radius:8px;padding:10px 14px;margin:8px 0">
+          <div style="color:var(--red);font-weight:600;font-size:0.9rem">⚠️ 隐患警告</div>
+          <p style="font-size:0.9rem;margin-top:4px">Prompt 要求模型列出环境变量 → 模型可能在输出中复述密钥值</p>
+        </div>
+        <p style="font-size:0.85rem;color:rgba(255,255,255,0.5)">GitHub 日志遮蔽机制无法捕获此类泄露</p>
+      </div>
+      <div class="card card-cyan anim-up d5">
+        <h3>📋 审计日志</h3>
+        <div class="json-block" style="font-size:0.8rem">{
+  <span style="color:var(--cyan)">"model"</span>: <span style="color:var(--gold)">"claude-sonnet-4-..."</span>,
+  <span style="color:var(--cyan)">"cost_usd"</span>: <span style="color:var(--green)">0.042</span>,
+  <span style="color:var(--cyan)">"duration_ms"</span>: <span style="color:var(--green)">12350</span>,
+  <span style="color:var(--cyan)">"num_turns"</span>: <span style="color:var(--green)">3</span>
+}</div>
+        <p style="font-size:0.9rem;margin-top:8px">JSON 输出自带元数据，全程可追溯</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 21 · CLI vs Agent SDK ==================== -->
+<div class="slide" data-slide="20">
+  <div class="content">
+    <div class="slide-title anim-up d1">CLI vs Agent SDK</div>
+    <div style="display:flex;gap:20px;align-items:center;margin-top:10px">
+      <div class="card card-cyan anim-up d2" style="flex:1.3;text-align:center;padding:20px 28px">
+        <div style="font-size:2rem;margin-bottom:4px">💻</div>
+        <h3 style="color:var(--cyan);font-size:1.4rem">CLI</h3>
+        <p style="color:var(--cyan);font-size:0.85rem;margin-bottom:8px">命令行接口</p>
+        <div class="badge badge-blue" style="margin-bottom:8px">如同 curl</div>
+        <div class="bullet-item" style="justify-content:center;margin-bottom:4px"><span style="color:var(--cyan);margin-right:8px">•</span><span>轻量便捷</span></div>
+        <div class="bullet-item" style="justify-content:center;margin-bottom:4px"><span style="color:var(--cyan);margin-right:8px">•</span><span>简单脚本</span></div>
+        <div class="bullet-item" style="justify-content:center;margin-bottom:0"><span style="color:var(--cyan);margin-right:8px">•</span><span>CI 流水线</span></div>
+      </div>
+      <div style="display:flex;align-items:center;flex-shrink:0">
+        <span style="font-family:'Orbitron';font-size:1.8rem;color:var(--gold);background:rgba(255,215,0,0.15);width:54px;height:54px;border-radius:50%;display:flex;align-items:center;justify-content:center">VS</span>
+      </div>
+      <div class="card card-purple anim-up d3" style="text-align:center;padding:20px 28px">
+        <div style="font-size:2rem;margin-bottom:4px">📦</div>
+        <h3 style="color:var(--purple);font-size:1.4rem">Agent SDK</h3>
+        <p style="color:var(--purple);font-size:0.85rem;margin-bottom:8px">智能体开发套件</p>
+        <div class="badge badge-purple" style="margin-bottom:8px">如同 HTTP 客户端库</div>
+        <div class="bullet-item" style="justify-content:center;margin-bottom:4px"><span style="color:var(--purple);margin-right:8px">•</span><span>动态提示</span></div>
+        <div class="bullet-item" style="justify-content:center;margin-bottom:4px"><span style="color:var(--purple);margin-right:8px">•</span><span>精细编排</span></div>
+        <div class="bullet-item" style="justify-content:center;margin-bottom:0"><span style="color:var(--purple);margin-right:8px">•</span><span>深度集成</span></div>
+      </div>
+    </div>
+    <div style="background:rgba(255,215,0,0.1);border:1px solid rgba(255,215,0,0.3);border-radius:12px;padding:14px 24px;text-align:center;margin-top:20px" class="anim-up d4">
+      <span style="color:var(--gold);font-size:1.1rem;font-weight:600">→ 第八章深入剖析 Agent SDK</span>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 22 · 渐进式落地 ==================== -->
+<div class="slide" data-slide="21">
+  <div class="content">
+    <div class="slide-title anim-up d1">渐进式落地 · 四阶段路径</div>
+    <div style="display:flex;gap:15px;margin-top:25px;align-items:stretch">
+      <div class="card card-cyan anim-up d2" style="flex:1;text-align:center">
+        <div style="font-size:2rem;margin-bottom:5px">👁️</div>
+        <div class="pill pill-cyan">PHASE 1</div>
+        <h3 style="color:var(--cyan);margin-top:8px">观察者</h3>
+        <p style="margin-top:8px;font-size:0.95rem">只输出报告<br>建立信任</p>
+      </div>
+      <div style="display:flex;align-items:center;color:var(--gold);font-size:1.5rem">→</div>
+      <div class="card card-green anim-up d3" style="flex:1;text-align:center">
+        <div style="font-size:2rem;margin-bottom:5px">💬</div>
+        <div class="pill pill-green">PHASE 2</div>
+        <h3 style="color:var(--green);margin-top:8px">顾问</h3>
+        <p style="margin-top:8px;font-size:0.95rem">CI 监控<br>标记警告</p>
+      </div>
+      <div style="display:flex;align-items:center;color:var(--gold);font-size:1.5rem">→</div>
+      <div class="card card-gold anim-up d4" style="flex:1;text-align:center">
+        <div style="font-size:2rem;margin-bottom:5px">🔒</div>
+        <div class="pill pill-gold">PHASE 3</div>
+        <h3 style="color:var(--gold);margin-top:8px">门禁</h3>
+        <p style="margin-top:8px;font-size:0.95rem">合并必要条件<br>逃生通道</p>
+      </div>
+      <div style="display:flex;align-items:center;color:var(--gold);font-size:1.5rem">→</div>
+      <div class="card card-green anim-up d5" style="flex:1;text-align:center;border-color:rgba(0,200,120,0.4)">
+        <div style="font-size:2rem;margin-bottom:5px">🔧</div>
+        <div class="pill pill-green">PHASE 4</div>
+        <h3 style="color:var(--green);margin-top:8px">主动修复</h3>
+        <p style="margin-top:8px;font-size:0.95rem">自动修复<br>+ Commit</p>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:center;gap:40px;margin-top:20px">
+      <span style="color:rgba(255,255,255,0.3);font-size:1.2rem">⏳</span>
+      <span style="color:rgba(255,255,255,0.3);font-size:1.2rem">⏳</span>
+      <span style="color:rgba(255,255,255,0.3);font-size:1.2rem">⏳</span>
+    </div>
+    <div class="bottom-quote anim-up d6">⏳ 关键原则：每个阶段至少运行 2–4 周，让团队有时间建立信任</div>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 23 · 本章小结 ==================== -->
+<div class="slide" data-slide="22">
+  <div class="content">
+    <div class="slide-title anim-up d1">本章小结</div>
+    <div class="grid-2" style="margin-top:20px">
+      <div class="card card-cyan anim-up d2" style="text-align:center">
+        <h3 style="font-size:1.5rem">🔹 -p 参数</h3>
+        <p style="margin-top:8px;font-size:1.1rem">Headless 模式入口</p>
+      </div>
+      <div class="card card-gold anim-up d3" style="text-align:center">
+        <h3 style="font-size:1.5rem">🔸 output-format</h3>
+        <p style="margin-top:8px;font-size:1.1rem">输出消费方式</p>
+      </div>
+      <div class="card card-green anim-up d4" style="text-align:center">
+        <h3 style="font-size:1.5rem">🔹 allowedTools</h3>
+        <p style="margin-top:8px;font-size:1.1rem">安全边界</p>
+      </div>
+      <div class="card card-purple anim-up d5" style="text-align:center">
+        <h3 style="font-size:1.5rem">🔸 max-turns / max-budget-usd</h3>
+        <p style="margin-top:8px;font-size:1.1rem">成本护栏</p>
+      </div>
+    </div>
+    <div style="background:rgba(255,215,0,0.1);border:1px solid rgba(255,215,0,0.3);border-radius:12px;padding:16px 30px;text-align:center;margin-top:25px" class="anim-up d6">
+      <span style="color:var(--gold);font-size:1.2rem;font-weight:700">📌 演进路径：交互助手 → 可编程组件 → CI/CD 标准环节</span>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 24 · 下章预告 ==================== -->
+<div class="slide" data-slide="23">
+  <div class="content" style="justify-content:center;align-items:center">
+    <div class="pill pill-gold anim-up d1" style="font-size:1.1rem;padding:8px 24px">[ 下章预告 ]</div>
+    <div style="font-family:'Orbitron';font-size:3.5rem;font-weight:800;color:#fff;text-align:center;margin-top:20px" class="anim-up d2">
+      Agent SDK 智能体开发
+    </div>
+    <div class="card card-purple anim-up d3" style="margin-top:30px;max-width:800px;text-align:center;padding:30px 40px">
+      <div style="color:var(--purple);font-size:0.9rem;margin-bottom:10px">NEXT · CHAPTER 08</div>
+      <div style="font-size:2rem;margin-bottom:10px">📦</div>
+      <h3 style="color:var(--purple);font-size:1.6rem">Agent SDK · 智能体开发套件</h3>
+      <div class="bullet-item" style="justify-content:center;margin-top:12px"><div class="bullet-dot" style="background:var(--purple)"></div><span>从命令行参数迈向编程接口</span></div>
+      <div class="bullet-item" style="justify-content:center"><div class="bullet-dot" style="background:var(--purple)"></div><span>TypeScript / Python 灵活控制 Claude 行为逻辑</span></div>
+    </div>
+    <div style="font-size:3rem;color:var(--gold);margin-top:20px" class="anim-up d4">→</div>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 25 · 预留页 ==================== -->
+<div class="slide" data-slide="24">
+  <div class="content" style="justify-content:center;align-items:center">
+    <div style="font-family:'Orbitron';font-size:2.5rem;color:rgba(255,255,255,0.15);text-align:center" class="anim-up d1">
+      RESERVED
+    </div>
+    <div style="font-size:1.2rem;color:rgba(255,255,255,0.3);margin-top:10px" class="anim-up d2">
+      预留页 · 待补充内容
+    </div>
+  </div>
+</div>
+
+</div><!-- end deck -->
+
+<!-- ===== 导航 ===== -->
+<div class="nav" id="nav">
+  <button id="prevBtn" title="上一页">‹</button>
+  <div class="dots" id="dots"></div>
+  <div class="page-info" id="pageInfo">1 / 25</div>
+  <button id="nextBtn" title="下一页">›</button>
+</div>
+
+<!-- ===== 雪花生成 ===== -->
+<script>
+(function(){
+  const field=document.getElementById('snowfield');
+  for(let i=0;i<30;i++){
+    const s=document.createElement('div');
+    s.className='snowflake';
+    s.textContent=['❄','❅','❆','✦','✧','·'][Math.floor(Math.random()*6)];
+    s.style.left=Math.random()*100+'%';
+    s.style.fontSize=(0.4+Math.random()*0.6)+'em';
+    s.style.animationDuration=(8+Math.random()*12)+'s';
+    s.style.animationDelay=(-Math.random()*20)+'s';
+    s.style.opacity=0.1+Math.random()*0.2;
+    field.appendChild(s);
+  }
+})();
+</script>
+
+<!-- ===== 幻灯片引擎 ===== -->
+<script>
+(function(){
+  const slides=Array.from(document.querySelectorAll('.slide'));
+  const total=slides.length;
+  const KEY='ch7-slide';
+  let current=0;
+
+  const dotsContainer=document.getElementById('dots');
+  const pageInfo=document.getElementById('pageInfo');
+  const prevBtn=document.getElementById('prevBtn');
+  const nextBtn=document.getElementById('nextBtn');
+
+  // Create dots
+  slides.forEach((_,i)=>{
+    const dot=document.createElement('div');
+    dot.className='dot'+(i===0?' active':'');
+    dot.addEventListener('click',()=>goTo(i));
+    dotsContainer.appendChild(dot);
+  });
+
+  function goTo(idx){
+    if(idx<0||idx>=total)return;
+    slides[current].classList.remove('active');
+    current=idx;
+    slides[current].classList.add('active');
+    // Reset animations
+    slides[current].querySelectorAll('[class*="anim-"]').forEach(el=>{
+      el.style.animation='none';
+      el.offsetHeight;
+      el.style.animation='';
+    });
+    updateNav();
+    savePos();
+  }
+
+  function updateNav(){
+    pageInfo.textContent=(current+1)+' / '+total;
+    dotsContainer.querySelectorAll('.dot').forEach((d,i)=>{
+      d.classList.toggle('active',i===current);
+    });
+  }
+
+  prevBtn.addEventListener('click',()=>goTo(current-1));
+  nextBtn.addEventListener('click',()=>goTo(current+1));
+
+  document.addEventListener('keydown',e=>{
+    if(e.key==='ArrowRight'||e.key==='ArrowDown'||e.key===' '){e.preventDefault();goTo(current+1)}
+    if(e.key==='ArrowLeft'||e.key==='ArrowUp'){e.preventDefault();goTo(current-1)}
+    if(e.key==='Home'){e.preventDefault();goTo(0)}
+    if(e.key==='End'){e.preventDefault();goTo(total-1)}
+  });
+
+  function savePos(){try{localStorage.setItem(KEY,current)}catch(e){}}
+  function loadPos(){
+    try{
+      const s=parseInt(localStorage.getItem(KEY),10);
+      if(!isNaN(s)&&s>=0&&s<total){goTo(s);return true}
+    }catch(e){}
+    return false;
+  }
+
+  // ===== 缩放 =====
+  function rescale(){
+    const deck=document.getElementById('deck');
+    const padX=40,padY=120;
+    const scale=Math.min(
+      (window.innerWidth-padX)/1920,
+      (window.innerHeight-padY)/1080
+    );
+    deck.style.transform='scale('+(scale*1.15)+')';
+  }
+  window.addEventListener('resize',rescale);
+  rescale();
+
+  if(!loadPos())goTo(0);
+})();
+</script>
+</body>
+</html>

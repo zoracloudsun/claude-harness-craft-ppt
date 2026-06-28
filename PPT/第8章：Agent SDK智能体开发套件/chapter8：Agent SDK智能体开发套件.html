@@ -1,0 +1,1681 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1920">
+<title>Chapter 8 · Agent SDK 智能体开发套件</title>
+<style>
+/* ===== 基础样式 ===== */
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Noto+Sans+SC:wght@300;400;500;700&family=JetBrains+Mono:wght@300;400;500&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --gold:#FFD700;--cyan:#00F3FF;--magenta:#FF00C8;--red:#FF4D4D;
+  --green:#00C878;--purple:#B482FF;--dark:#0A0A0A;--dark-card:rgba(15,15,20,0.85);
+  --grid:rgba(40,40,40,0.4);--text:#E8E8E8;--text-dim:rgba(255,255,255,0.55);
+  --gold-glow:rgba(255,215,0,0.6);--cyan-glow:rgba(0,243,255,0.6);--magenta-glow:rgba(255,0,200,0.6);
+}
+body{
+  background:var(--dark);color:#fff;
+  font-family:'Inter','Noto Sans SC','JetBrains Mono',sans-serif;
+  font-size:18px;line-height:1.7;
+  overflow:hidden;height:100vh;
+  display:flex;justify-content:center;align-items:center;
+}
+/* ===== 背景 ===== */
+body::before{
+  content:"";position:fixed;inset:0;
+  background:
+    linear-gradient(rgba(40,40,40,0.4) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(40,40,40,0.4) 1px,transparent 1px);
+  background-size:32px 32px;z-index:0;
+  animation:gridPulse 6s infinite alternate;
+}
+@keyframes gridPulse{0%{opacity:0.6}100%{opacity:0.85}}
+/* ===== 雪花 ===== */
+#snowfield{position:fixed;inset:0;z-index:1;pointer-events:none;overflow:hidden}
+.snowflake{
+  position:absolute;border-radius:50%;background:white;
+  pointer-events:none;
+  animation:snowfall linear infinite,snowSway ease-in-out infinite;
+}
+@keyframes snowfall{0%{top:-8px;opacity:0}5%{opacity:1}92%{opacity:0.8}100%{top:105vh;opacity:0}}
+@keyframes snowSway{0%,100%{transform:translateX(0) rotate(0deg)}25%{transform:translateX(18px) rotate(90deg)}50%{transform:translateX(-12px) rotate(180deg)}75%{transform:translateX(22px) rotate(270deg)}}
+/* ===== 幻灯片容器 ===== */
+.deck{
+  position:relative;width:1920px;height:1080px;
+  margin:0 auto;z-index:2;
+}
+.slide{
+  position:absolute;top:0;left:0;width:100%;height:100%;
+  display:none;flex-direction:column;
+  align-items:center;justify-content:center;
+  padding:80px 120px 100px;text-align:center;
+  overflow:hidden;
+}
+.slide.active{display:flex !important}
+.slide:not(.active){display:none !important}
+/* ===== 内容区 ===== */
+.content{
+  flex:1;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:30px;
+  width:100%;
+}
+/* ===== 封面 ===== */
+.cover{text-align:center;justify-content:center;align-items:center}
+.cover .chap{
+  font-family:'Orbitron',sans-serif;font-size:1.3rem;
+  color:rgba(255,255,255,0.45);letter-spacing:6px;margin-bottom:20px;
+}
+.cover h1{
+  font-family:'Orbitron',sans-serif;font-size:4rem;font-weight:800;
+  color:#fff;text-shadow:0 0 60px rgba(255,215,0,0.3);
+  line-height:1.3;margin-bottom:10px;
+}
+.cover h1 span{
+  background:linear-gradient(135deg,#fff 0%,#fff 60%,rgba(255,215,0,0.8) 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+}
+.cover .sub{
+  font-family:'Orbitron',sans-serif;font-size:1.8rem;
+  color:var(--gold);font-weight:700;margin-top:10px;
+}
+.cover .en{
+  font-family:'Orbitron',sans-serif;font-size:1rem;
+  color:rgba(255,255,255,0.2);margin-top:15px;
+  text-transform:uppercase;letter-spacing:4px;
+}
+/* ===== 标题 ===== */
+.slide-title{
+  font-family:'Orbitron',sans-serif;font-size:2.4rem;
+  color:var(--gold);text-align:center;font-weight:700;
+  text-shadow:0 0 30px rgba(255,215,0,0.3);margin-bottom:10px;
+}
+.slide-sub{
+  font-size:1.1rem;color:rgba(255,255,255,0.5);
+  text-align:center;margin-top:-15px;margin-bottom:10px;
+}
+/* ===== 双栏 ===== */
+.dual-col{display:grid;grid-template-columns:1fr 1fr;gap:30px}
+/* ===== 卡片 ===== */
+.card{
+  background:var(--dark-card);border-radius:16px;
+  padding:28px 32px;border:1px solid rgba(255,215,0,0.1);
+}
+.card-cyan{border-color:rgba(0,243,255,0.2)}
+.card-gold{border-color:rgba(255,215,0,0.2)}
+.card-red{border-color:rgba(255,77,77,0.2)}
+.card-green{border-color:rgba(0,200,120,0.2)}
+.card-purple{border-color:rgba(180,130,255,0.2)}
+.card h3{
+  font-family:'Orbitron',sans-serif;font-size:1.2rem;
+  color:var(--gold);margin-bottom:12px;font-weight:600;
+}
+.card p{font-size:1rem;color:rgba(255,255,255,0.8);line-height:1.7}
+.card-header{
+  font-family:'Orbitron',sans-serif;font-size:1rem;
+  color:var(--cyan);font-weight:600;margin-bottom:10px;
+}
+/* ===== 项目符号 ===== */
+.bullet-item{
+  display:flex;align-items:flex-start;gap:12px;
+  margin-bottom:10px;font-size:1rem;
+}
+.bullet-dot{
+  width:10px;height:10px;border-radius:50%;
+  background:var(--gold);margin-top:8px;flex-shrink:0;
+}
+/* ===== 标签 ===== */
+.pill{
+  display:inline-block;padding:4px 14px;border-radius:20px;
+  font-size:0.85rem;font-weight:600;margin-bottom:10px;
+}
+.pill-cyan{background:rgba(0,243,255,0.15);color:var(--cyan)}
+.pill-gold{background:rgba(255,215,0,0.15);color:var(--gold)}
+.pill-green{background:rgba(0,200,120,0.15);color:var(--green)}
+.pill-red{background:rgba(255,77,77,0.15);color:var(--red)}
+.pill-purple{background:rgba(180,130,255,0.15);color:var(--purple)}
+/* ===== 三栏 ===== */
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+/* ===== 流程箭头 ===== */
+.flow-arrow{
+  font-family:'Orbitron',sans-serif;font-size:1.5rem;
+  color:var(--gold);text-align:center;margin:5px 0;
+}
+/* ===== 底部引语 ===== */
+.bottom-quote{
+  font-size:1rem;color:rgba(255,255,255,0.4);
+  text-align:center;font-style:italic;margin-top:10px;
+  padding-top:15px;
+}
+/* ===== 指标 ===== */
+.metric{
+  font-family:'Orbitron',sans-serif;font-size:2.5rem;
+  font-weight:800;color:var(--gold);text-align:center;
+}
+.metric-label{
+  font-size:1rem;color:rgba(255,255,255,0.6);
+  text-align:center;margin-top:5px;
+}
+/* ===== 代码块 ===== */
+.code-block{
+  background:rgba(10,10,10,0.9);border:1px solid rgba(255,215,0,0.1);
+  border-radius:10px;padding:18px 22px;
+  font-family:'JetBrains Mono',monospace;font-size:0.9rem;
+  color:#e0e0e0;line-height:1.6;overflow-x:auto;white-space:pre;
+}
+.code-block .kw{color:#ff79c6} /* 关键字 import/from/async/def/class/if/return */
+.code-block .fn{color:#50fa7b} /* 函数名 */
+.code-block .str{color:#f1fa8c} /* 字符串 */
+.code-block .cmt{color:#6272a4} /* 注释 */
+.code-block .num{color:#bd93f9} /* 数字 */
+.code-block .op{color:#ff79c6} /* 操作符 */
+.code-block .var{color:#8be9fd} /* 变量/参数 */
+.code-block .dec{color:#ffb86c} /* 装饰器 */
+.code-block .type{color:#8be9fd} /* 类型 */
+.code-block .bool{color:#bd93f9} /* 布尔值 */
+.code-block .none{color:#bd93f9} /* None */
+.code-block .self{color:#ff6e6e} /* self */
+/* ===== JSON 语法高亮 ===== */
+.json-block{background:rgba(10,10,10,0.85);border-radius:10px;padding:18px 22px;font-family:'JetBrains Mono',monospace;font-size:0.85rem;color:#e0e0e0;line-height:1.6;overflow-x:auto;white-space:pre;text-align:left}
+.json-block .key{color:#8be9fd} /* JSON key */
+.json-block .str{color:#f1fa8c} /* JSON string */
+.json-block .num{color:#bd93f9} /* JSON number */
+.json-block .bool{color:#bd93f9} /* JSON boolean */
+.json-block .null{color:#bd93f9} /* JSON null */
+.json-block .cmt{color:#6272a4} /* 注释 */
+/* ===== Shell 命令高亮 ===== */
+.shell-block{background:rgba(10,10,10,0.9);border:1px solid rgba(0,243,255,0.2);border-radius:10px;padding:18px 22px;font-family:'JetBrains Mono',monospace;font-size:0.9rem;color:#e0e0e0;line-height:1.6;overflow-x:auto;white-space:pre}
+.shell-block .prompt{color:#50fa7b} /* 命令提示符 $ */
+.shell-block .cmd{color:#8be9fd} /* 命令 */
+.shell-block .flag{color:#ff79c6} /* 参数标志 */
+.shell-block .arg{color:#f1fa8c} /* 参数 */
+.shell-block .cmt{color:#6272a4} /* 注释 */
+/* ===== 警告框 ===== */
+.alert-box{
+  background:rgba(255,77,77,0.1);border:1px solid rgba(255,77,77,0.3);
+  border-radius:12px;padding:14px 20px;
+  font-size:1rem;color:var(--red);text-align:center;
+}
+.alert-box-green{
+  background:rgba(0,200,120,0.1);border:1px solid rgba(0,200,120,0.3);
+  border-radius:12px;padding:14px 20px;
+  font-size:1rem;color:var(--green);text-align:center;
+}
+/* ===== 统计卡 ===== */
+.stat-card{
+  background:var(--dark-card);border-radius:14px;
+  padding:20px 24px;text-align:center;
+  border:1px solid rgba(255,215,0,0.1);
+}
+.stat-card .num{
+  font-family:'Orbitron',sans-serif;font-size:2rem;
+  font-weight:800;color:var(--gold);
+}
+.stat-card .label{
+  font-size:0.95rem;color:rgba(255,255,255,0.6);margin-top:5px;
+}
+/* ===== 层卡 ===== */
+.layer-card{
+  border-radius:12px;padding:14px 20px;
+  font-size:1rem;font-weight:600;
+}
+/* ===== JSON 块 ===== */
+.json-block{
+  background:rgba(10,10,10,0.85);border-radius:10px;
+  padding:18px 22px;font-family:'JetBrains Mono',monospace;
+  font-size:0.85rem;color:#e0e0e0;line-height:1.6;
+  overflow-x:auto;white-space:pre;text-align:left;
+}
+/* ===== 进度条 ===== */
+.progress-bar{
+  background:rgba(255,255,255,0.1);border-radius:8px;
+  height:8px;width:100%;overflow:hidden;
+}
+.progress-fill{
+  height:100%;border-radius:8px;
+  background:linear-gradient(90deg,var(--cyan),var(--magenta));
+  transition:width 0.3s ease;
+}
+/* ===== 表格 ===== */
+.styled-table{
+  width:100%;border-collapse:collapse;
+  font-size:0.95rem;
+}
+.styled-table th{
+  background:rgba(255,215,0,0.1);color:var(--gold);
+  padding:12px 16px;text-align:center;font-weight:600;
+  border-bottom:2px solid rgba(255,215,0,0.2);
+}
+.styled-table td{
+  padding:10px 16px;border-bottom:1px solid rgba(255,255,255,0.05);
+  color:rgba(255,255,255,0.8);
+}
+.styled-table tr:hover td{
+  background:rgba(255,255,255,0.02);
+}
+/* ===== 导航 ===== */
+.nav{
+  position:fixed;bottom:30px;left:50%;transform:translateX(-50%);
+  display:flex;align-items:center;gap:20px;z-index:100;
+  background:rgba(10,10,10,0.9);border:1px solid rgba(255,255,255,0.1);
+  border-radius:40px;padding:10px 28px;backdrop-filter:blur(10px);
+}
+.nav button{
+  background:none;border:1px solid rgba(255,255,255,0.2);
+  color:#fff;width:40px;height:40px;border-radius:50%;
+  cursor:pointer;font-size:1.1rem;
+  display:flex;align-items:center;justify-content:center;
+  transition:all 0.2s;
+}
+.nav button:hover{
+  border-color:var(--cyan);color:var(--cyan);
+  box-shadow:0 0 10px var(--cyan-glow);
+}
+.nav .page-info{
+  font-family:'JetBrains Mono',monospace;font-size:0.85rem;
+  color:rgba(255,255,255,0.5);min-width:80px;text-align:center;
+}
+.nav .dots{display:flex;gap:6px}
+.nav .dot{
+  width:8px;height:8px;border-radius:50%;
+  background:rgba(255,255,255,0.2);cursor:pointer;transition:all 0.3s;
+}
+.nav .dot.active{
+  background:var(--cyan);box-shadow:0 0 8px var(--cyan-glow);
+}
+/* ===== 动画 ===== */
+.anim-up{animation:fadeInUp 0.6s ease-out both}
+.anim-in{animation:fadeIn 0.6s ease-out both}
+.anim-scale{animation:scaleIn 0.7s ease-out both}
+.anim-left{animation:slideInLeft 0.6s ease-out both}
+.anim-right{animation:slideInRight 0.6s ease-out both}
+.d1{animation-delay:0.1s}.d2{animation-delay:0.25s}
+.d3{animation-delay:0.4s}.d4{animation-delay:0.55s}
+.d5{animation-delay:0.7s}.d6{animation-delay:0.85s}
+.d7{animation-delay:1.0s}.d8{animation-delay:1.15s}
+@keyframes fadeInUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes scaleIn{from{opacity:0;transform:scale(0.85)}to{opacity:1;transform:scale(1)}}
+@keyframes slideInLeft{from{opacity:0;transform:translateX(-40px)}to{opacity:1;transform:translateX(0)}}
+@keyframes slideInRight{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}
+/* ===== 页脚 ===== */
+.page-footer{
+  position:absolute;bottom:30px;left:0;right:0;
+  text-align:center;font-size:0.8rem;color:rgba(255,255,255,0.3);
+}
+</style>
+</head>
+<body>
+<!-- SNOWFLAKES -->
+<div id="snowfield"></div>
+
+<!-- DECK -->
+<div class="deck" id="deck">
+
+  <!-- ==================== SLIDE 1: 封面页 ==================== -->
+  <div class="slide active" data-idx="1">
+    <div class="content cover">
+      <div class="chap anim-in d1">CHAPTER · 08</div>
+      <h1 class="anim-up d2"><span>Claude Code Harness</span></h1>
+      <div class="sub anim-up d3">核心要点 / 解析指南</div>
+      <div class="cover-divider anim-in d4" style="width:120px;height:2px;background:linear-gradient(90deg,transparent,var(--gold),transparent);margin:20px auto"></div>
+      <div class="sub anim-up d5" style="color:var(--gold)">第 8 章：Agent SDK 智能体开发套件</div>
+      <div class="en anim-in d6">Agent SDK · From Tool to Component</div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 2: 章节导览页 ==================== -->
+  <div class="slide" data-idx="2">
+    <div class="content">
+      <div class="slide-title anim-up d1">章节导览</div>
+      <div class="slide-sub anim-in d2">第七章回顾 → 本章重点</div>
+      <div class="dual-col" style="width:100%;margin-top:20px">
+        <div class="card card-cyan anim-left d3">
+          <div class="card-header" style="color:var(--cyan)">📘 第七章回顾</div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--cyan)"></div><div><code>claude -p</code> 命令行入口</div></div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--cyan)"></div><div>无人值守 CI / CD 流水线</div></div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--cyan)"></div><div>参数驱动 · 单向输出</div></div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--cyan)"></div><div>使用 Claude 的极致形态</div></div>
+        </div>
+        <div class="card card-purple anim-right d4">
+          <div class="card-header" style="color:var(--purple)">🎯 本章重点</div>
+          <div style="font-family:'Orbitron',sans-serif;font-size:2.5rem;font-weight:800;background:linear-gradient(135deg,var(--purple),var(--cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin:10px 0">Agent SDK</div>
+          <div style="font-size:1.3rem;color:var(--gold);font-weight:600;margin:10px 0">从工具到组件</div>
+          <div style="color:rgba(255,255,255,0.7)">把 Claude 嵌入你的应用</div>
+        </div>
+      </div>
+      <div class="bottom-quote anim-in d5">借舟者随波而行 · 造舟者定其去向</div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 3: 故事引入页 ==================== -->
+  <div class="slide" data-idx="3">
+    <div class="content">
+      <div class="slide-title anim-up d1">[ 故事引入 ]</div>
+      <div style="font-size:2.2rem;font-weight:700;color:#fff;margin:10px 0" class="anim-up d2">他们要的是产品，不是命令行</div>
+      <div class="dual-col" style="width:100%;margin-top:20px">
+        <div class="card anim-left d3" style="text-align:left">
+          <div style="font-size:1.1rem;color:rgba(255,255,255,0.7);font-style:italic;margin-bottom:15px">
+            "能不能让非技术同事也能用 Claude 分析代码？<br>
+            只要输入用户故事，<br>
+            系统就自动列出受影响的模块。"
+          </div>
+          <div style="font-size:0.9rem;color:var(--text-dim)">• 产品经理 · 内部工具需求</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:20px">
+          <div class="card card-cyan anim-right d4">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+              <span style="font-size:1.5rem">🔹</span>
+              <span style="font-family:'Orbitron',sans-serif;font-size:1.1rem;color:var(--cyan)">Headless 模式</span>
+            </div>
+            <div style="color:rgba(255,255,255,0.7);font-style:italic">参数驱动 Claude</div>
+            <div style="color:rgba(255,255,255,0.6);margin-top:8px">像 <strong style="color:var(--cyan)">按计算器</strong>：一次输入，一次输出</div>
+          </div>
+          <div class="card card-purple anim-right d5">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+              <span style="font-size:1.5rem">🔹</span>
+              <span style="font-family:'Orbitron',sans-serif;font-size:1.1rem;color:var(--purple)">Agent SDK</span>
+            </div>
+            <div style="color:rgba(255,255,255,0.7);font-style:italic">代码编排 Claude</div>
+            <div style="color:rgba(255,255,255,0.6);margin-top:8px">像 <strong style="color:var(--purple)">给计算器编程</strong>：控制流程、状态、产品形态</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 4: 演进路线图 ==================== -->
+  <div class="slide" data-idx="4">
+    <div class="content">
+      <div class="slide-title anim-up d1">[ 控制粒度演进 ]</div>
+      <div style="font-size:1.8rem;font-weight:700;color:#fff;margin:10px 0" class="anim-up d2">从 "用 Claude Code" 到 "构建 Agent"</div>
+      <div style="font-size:1rem;color:rgba(255,255,255,0.5);margin-bottom:20px" class="anim-in d3">乘客 → 构建者，灵活性最大，工程复杂度最高</div>
+      <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin:20px 0" class="anim-up d4">
+        <div class="card" style="padding:16px 20px;min-width:140px;border-color:rgba(0,243,255,0.3)">
+          <div style="font-size:0.8rem;color:var(--cyan)">第 1 阶段</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:1rem;color:#fff;font-weight:600">CLAUDE.md</div>
+          <div style="font-size:0.85rem;color:rgba(255,255,255,0.6)">自然语言配置</div>
+        </div>
+        <div class="card" style="padding:16px 20px;min-width:140px;border-color:rgba(0,243,255,0.25)">
+          <div style="font-size:0.8rem;color:var(--cyan)">第 2 阶段</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:1rem;color:#fff;font-weight:600">Skills</div>
+          <div style="font-size:0.85rem;color:rgba(255,255,255,0.6)">技能模块化</div>
+        </div>
+        <div class="card" style="padding:16px 20px;min-width:140px;border-color:rgba(255,215,0,0.25)">
+          <div style="font-size:0.8rem;color:var(--gold)">第 3 阶段</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:1rem;color:#fff;font-weight:600">子智能体</div>
+          <div style="font-size:0.85rem;color:rgba(255,255,255,0.6)">角色分工</div>
+        </div>
+        <div class="card" style="padding:16px 20px;min-width:140px;border-color:rgba(255,215,0,0.25)">
+          <div style="font-size:0.8rem;color:var(--gold)">第 4 阶段</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:1rem;color:#fff;font-weight:600">Hooks</div>
+          <div style="font-size:0.85rem;color:rgba(255,255,255,0.6)">事件拦截</div>
+        </div>
+        <div class="card" style="padding:16px 20px;min-width:140px;border-color:rgba(180,130,255,0.25)">
+          <div style="font-size:0.8rem;color:var(--purple)">第 5 阶段</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:1rem;color:#fff;font-weight:600">MCP</div>
+          <div style="font-size:0.85rem;color:rgba(255,255,255,0.6)">协议接入</div>
+        </div>
+        <div class="card" style="padding:16px 20px;min-width:140px;border-color:rgba(180,130,255,0.3)">
+          <div style="font-size:0.8rem;color:var(--purple)">第 6 阶段</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:1rem;color:#fff;font-weight:600">Headless</div>
+          <div style="font-size:0.85rem;color:rgba(255,255,255,0.6)">参数驱动</div>
+        </div>
+        <div class="card" style="padding:16px 20px;min-width:140px;border-color:rgba(255,0,200,0.3)">
+          <div style="font-size:0.8rem;color:var(--magenta)">第 7 阶段</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:1rem;color:#fff;font-weight:600">Agent SDK</div>
+          <div style="font-size:0.85rem;color:rgba(255,255,255,0.6)">代码编排</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:20px;margin-top:20px" class="anim-in d5">
+        <div style="font-size:1rem;color:var(--cyan)">≡ 配置驱动</div>
+        <div style="color:var(--gold)">→</div>
+        <div style="font-size:1rem;color:var(--gold)">构建者视角 · 完全编排</div>
+        <div style="color:var(--gold)">→</div>
+        <div style="font-size:1rem;color:var(--magenta)">代码驱动 &lt; &gt;</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 5: 安装与命名页 ==================== -->
+  <div class="slide" data-idx="5">
+    <div class="content">
+      <div class="slide-title anim-up d1">[ 安装与命名 ]</div>
+      <div style="font-size:1.8rem;font-weight:700;color:#fff;margin:10px 0" class="anim-up d2">双语言对等安装</div>
+      <div style="font-size:1rem;color:rgba(255,255,255,0.5);margin-bottom:15px" class="anim-in d3">Python 与 TypeScript 两版本，API 形状几乎完全镜像</div>
+      <div class="pill pill-purple anim-in d4" style="font-size:0.95rem;padding:8px 20px;margin-bottom:20px">📌 包名更名 · claude-code-sdk → claude-agent-sdk · 2025 年末</div>
+      <div class="dual-col" style="width:100%">
+        <div class="card card-gold anim-left d5">
+          <div style="font-family:'Orbitron',sans-serif;font-size:1.2rem;color:var(--gold);margin-bottom:12px">🐍 Python</div>
+          <div style="font-size:0.9rem;color:rgba(255,255,255,0.5);margin-bottom:10px">数据 / 科研 / 后端</div>
+          <div class="shell-block" style="font-size:0.85rem"><span class="prompt">$</span> <span class="cmd">pip install</span> <span class="arg">claude-agent-sdk</span></div>
+          <div class="code-block" style="font-size:0.85rem;margin-top:10px"><span class="kw">import</span> claude_agent_sdk
+<span class="cmt"># async / await · 异步生成器</span></div>
+        </div>
+        <div class="card card-cyan anim-right d6">
+          <div style="font-family:'Orbitron',sans-serif;font-size:1.2rem;color:var(--cyan);margin-bottom:12px">📘 TypeScript</div>
+          <div style="font-size:0.9rem;color:rgba(255,255,255,0.5);margin-bottom:10px">Web / 工程 / 全栈</div>
+          <div class="shell-block" style="font-size:0.85rem"><span class="prompt">$</span> <span class="cmd">npm install</span> <span class="arg">@anthropic-ai/claude-agent-sdk</span></div>
+          <div class="code-block" style="font-size:0.85rem;margin-top:10px"><span class="kw">import</span> { <span class="fn">query</span> } <span class="kw">from</span> <span class="str">"..."</span>
+<span class="cmt">// AsyncIterable · 流式消息</span></div>
+        </div>
+      </div>
+      <div style="font-size:1.2rem;color:var(--green);font-weight:600;margin-top:15px" class="anim-in d7">✅</div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 6: 入口函数对比页 ==================== -->
+  <div class="slide" data-idx="6">
+    <div class="content">
+      <div class="pill pill-purple anim-in d1">AGENT SDK · 入口函数</div>
+      <div class="slide-title anim-up d2">query() · 异步消息流入口</div>
+      <div class="dual-col" style="width:100%;margin-top:20px">
+        <div class="card card-cyan anim-left d3">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:15px">
+            <span style="font-size:1.5rem">🔹</span>
+            <span style="font-family:'Orbitron',sans-serif;font-size:1.1rem;color:var(--cyan)">Headless 模式</span>
+          </div>
+          <div style="color:rgba(255,255,255,0.5);font-style:italic;margin-bottom:10px">命令行入口</div>
+          <div class="shell-block" style="font-size:0.9rem"><span class="prompt">$</span> <span class="cmd">claude</span> <span class="flag">-p</span> <span class="str">"prompt"</span></div>
+          <div style="margin-top:15px">
+            <div class="bullet-item"><div class="bullet-dot" style="background:var(--cyan)"></div><div>一次输入 → 一次完整输出</div></div>
+            <div class="bullet-item"><div class="bullet-dot" style="background:var(--cyan)"></div><div>同步阻塞 · 等待最终结果</div></div>
+          </div>
+        </div>
+        <div class="card card-purple anim-right d4">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:15px">
+            <span style="font-size:1.5rem">🔹</span>
+            <span style="font-family:'Orbitron',sans-serif;font-size:1.1rem;color:var(--purple)">Agent SDK</span>
+          </div>
+          <div style="color:rgba(255,255,255,0.5);font-style:italic;margin-bottom:10px">异步生成器</div>
+          <div class="code-block" style="font-size:0.9rem"><span class="kw">async for</span> <span class="var">msg</span> <span class="kw">in</span> <span class="fn">query</span>(<span class="var">prompt</span>, <span class="var">options</span>):
+    <span class="cmt"># 逐条到达</span></div>
+          <div style="margin-top:15px">
+            <div class="bullet-item"><div class="bullet-dot" style="background:var(--purple)"></div><div>消息逐条 <strong style="color:var(--gold)">即时推送</strong></div></div>
+            <div class="bullet-item"><div class="bullet-dot" style="background:var(--purple)"></div><div>类比 TCP 长连接 · 不阻塞</div></div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:20px" class="anim-up d5">
+        <div style="font-size:0.9rem;color:rgba(255,255,255,0.5);margin-bottom:10px">消息流</div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:10px">
+          <span class="pill pill-cyan">system</span>
+          <span style="color:var(--gold)">→</span>
+          <span class="pill pill-gold">assistant</span>
+          <span style="color:var(--gold)">→</span>
+          <span class="pill pill-gold">assistant</span>
+          <span style="color:var(--gold)">→</span>
+          <span class="pill pill-green">tool_use</span>
+          <span style="color:var(--gold)">→</span>
+          <span class="pill pill-purple">result</span>
+        </div>
+      </div>
+      <div style="font-size:0.9rem;color:rgba(255,255,255,0.4);margin-top:10px" class="anim-in d6">← 即时推送，逐条到达</div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 7: 最小示例代码页 ==================== -->
+  <div class="slide" data-idx="7">
+    <div class="content">
+      <div class="slide-title anim-up d1">最小示例 · mini_agent.py</div>
+      <div style="font-size:1rem;color:rgba(255,255,255,0.5);margin-bottom:20px" class="anim-in d2">不到 20 行</div>
+      <div class="dual-col" style="width:100%">
+        <div class="card anim-left d3" style="text-align:left">
+          <div class="code-block" style="font-size:0.85rem;line-height:1.8"><span class="kw">import</span> asyncio
+<span class="kw">from</span> claude_agent_sdk <span class="kw">import</span> <span class="fn">query</span>, <span class="type">ClaudeAgentOptions</span>
+
+<span class="kw">async def</span> <span class="fn">main</span>():
+    <span class="var">options</span> = <span class="type">ClaudeAgentOptions</span>(
+        <span class="var">max_turns</span>=<span class="num">3</span>,
+        <span class="var">allowed_tools</span>=[<span class="str">"Read"</span>, <span class="str">"Grep"</span>],
+        <span class="var">system_prompt</span>=<span class="str">"You are a code reviewer."</span>,
+    )
+    <span class="kw">async for</span> <span class="var">msg</span> <span class="kw">in</span> <span class="fn">query</span>(
+        <span class="var">prompt</span>=<span class="str">"分析 src/api 模块"</span>,
+        <span class="var">options</span>=<span class="var">options</span>
+    ):
+        <span class="kw">if</span> <span class="var">msg</span>.<span class="var">type</span> == <span class="str">"assistant"</span>:
+            <span class="fn">print</span>(<span class="var">msg</span>.<span class="var">content</span>, <span class="var">end</span>=<span class="str">""</span>, <span class="var">flush</span>=<span class="bool">True</span>)
+        <span class="kw">elif</span> <span class="var">msg</span>.<span class="var">type</span> == <span class="str">"result"</span>:
+            <span class="fn">print</span>(<span class="str">f"\n成本: ${</span><span class="var">msg</span>.<span class="var">cost</span><span class="str">} · 耗时: {</span><span class="var">msg</span>.<span class="var">duration</span><span class="str">}s"</span>)
+
+asyncio.<span class="fn">run</span>(<span class="fn">main</span>())</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div class="card card-gold anim-right d4">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:1.3rem">⏱️</span>
+              <div>
+                <div style="font-family:'JetBrains Mono',monospace;color:var(--gold);font-weight:600">max_turns</div>
+                <div style="font-size:0.9rem;color:rgba(255,255,255,0.7)">限制对话轮次 · 防失控</div>
+              </div>
+            </div>
+          </div>
+          <div class="card card-cyan anim-right d5">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:1.3rem">☑️</span>
+              <div>
+                <div style="font-family:'JetBrains Mono',monospace;color:var(--cyan);font-weight:600">allowed_tools</div>
+                <div style="font-size:0.9rem;color:rgba(255,255,255,0.7)">工具白名单 · 仅 Read / Grep</div>
+              </div>
+            </div>
+          </div>
+          <div class="card card-green anim-right d6">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:1.3rem">〰️</span>
+              <div>
+                <div style="font-family:'JetBrains Mono',monospace;color:var(--green);font-weight:600">async for</div>
+                <div style="font-size:0.9rem;color:rgba(255,255,255,0.7)">流式遍历 · 实时打印 assistant</div>
+              </div>
+            </div>
+          </div>
+          <div class="card card-purple anim-right d7">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:1.3rem">📄</span>
+              <div>
+                <div style="font-family:'JetBrains Mono',monospace;color:var(--purple);font-weight:600">result</div>
+                <div style="font-size:0.9rem;color:rgba(255,255,255,0.7)">收尾元数据 · 费用 + 耗时</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 8: 应用场景页 ==================== -->
+  <div class="slide" data-idx="8">
+    <div class="content">
+      <div class="pill pill-purple anim-in d1">流式价值</div>
+      <div class="slide-title anim-up d2">异步生成器 · 两大应用场景</div>
+      <div class="dual-col" style="width:100%;margin-top:20px">
+        <div class="card card-cyan anim-left d3">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:15px">
+            <span style="font-size:1.5rem">🖥️</span>
+            <span style="font-family:'Orbitron',sans-serif;font-size:1.2rem;color:var(--cyan)">Web 应用</span>
+          </div>
+          <div style="font-size:0.9rem;color:rgba(255,255,255,0.5);font-style:italic;margin-bottom:12px">SSE 实时推送 · 前端打字机</div>
+          <div class="shell-block" style="font-size:0.85rem;text-align:left"><span class="cmd">claude.ai</span> · <span class="flag">/chat</span>
+<span class="prompt">▸</span> <span class="arg">分析模块依赖</span>
+<span class="cmt">正在扫描 src/api...</span>
+<span class="str">发现 3 个受影响文件 ▌</span></div>
+          <div style="margin-top:12px">
+            <div class="bullet-item"><div class="bullet-dot" style="background:var(--cyan)"></div><div>逐字浮现 · 复现 Claude 体验</div></div>
+            <div class="bullet-item"><div class="bullet-dot" style="background:var(--cyan)"></div><div>用户立刻感知到响应</div></div>
+          </div>
+        </div>
+        <div class="card card-purple anim-right d4">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:15px">
+            <span style="font-size:1.5rem">⚙️</span>
+            <span style="font-family:'Orbitron',sans-serif;font-size:1.2rem;color:var(--purple)">CI/CD 流水线</span>
+          </div>
+          <div style="font-size:0.9rem;color:rgba(255,255,255,0.5);font-style:italic;margin-bottom:12px">中间结论 · 并发抓取</div>
+          <div class="shell-block" style="font-size:0.85rem;text-align:left"><span class="cmd">analyze</span> <span class="str">✓</span> → <span class="cmd">extract</span> <span class="cmt">...</span> → <span class="cmd">report</span>
+<span class="cmt">[stream]</span> <span class="arg">上游分析中，</span>
+<span class="arg">下游已开始抓取中间结论...</span></div>
+          <div style="margin-top:12px">
+            <div class="bullet-item"><div class="bullet-dot" style="background:var(--purple)"></div><div>不再同步阻塞 · 并行推进</div></div>
+            <div class="bullet-item"><div class="bullet-dot" style="background:var(--purple)"></div><div>整条流水线显著提速</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 9: 消息类型总览页 ==================== -->
+  <div class="slide" data-idx="9">
+    <div class="content">
+      <div class="pill pill-cyan anim-in d1">MESSAGE TYPES</div>
+      <div class="slide-title anim-up d2">四种消息类型 · 总览</div>
+      <div style="font-size:1rem;color:rgba(255,255,255,0.5);margin-bottom:25px" class="anim-in d3">每条消息以 <code style="color:var(--cyan)">type</code> 字段标识身份 —— 像 HTTP 状态码，决定流转的下一步</div>
+      <div class="grid-2" style="width:100%">
+        <div class="card card-cyan anim-left d4">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+            <div style="width:40px;height:40px;border-radius:50%;background:rgba(0,243,255,0.2);display:flex;align-items:center;justify-content:center;font-size:1.2rem;color:var(--cyan)">🔵</div>
+            <div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:1.1rem;color:var(--cyan);font-weight:600">system</div>
+              <div style="font-size:0.85rem;color:rgba(255,255,255,0.5)">init</div>
+            </div>
+          </div>
+          <div style="color:rgba(255,255,255,0.8)">会话初始化 · 返回 <code>session_id</code>、模型、工具集</div>
+        </div>
+        <div class="card card-gold anim-right d5">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+            <div style="width:40px;height:40px;border-radius:50%;background:rgba(255,215,0,0.2);display:flex;align-items:center;justify-content:center;font-size:1.2rem;color:var(--gold)">🟡</div>
+            <div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:1.1rem;color:var(--gold);font-weight:600">assistant</div>
+              <div style="font-size:0.85rem;color:rgba(255,255,255,0.5)">Claude response</div>
+            </div>
+          </div>
+          <div style="color:rgba(255,255,255,0.8)">模型响应 · <code>content</code> 含 text 与 <code>tool_use</code> 块</div>
+        </div>
+        <div class="card card-green anim-left d6">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+            <div style="width:40px;height:40px;border-radius:50%;background:rgba(0,200,120,0.2);display:flex;align-items:center;justify-content:center;font-size:1.2rem;color:var(--green)">🟢</div>
+            <div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:1.1rem;color:var(--green);font-weight:600">user</div>
+              <div style="font-size:0.85rem;color:rgba(255,255,255,0.5)">tool_result</div>
+            </div>
+          </div>
+          <div style="color:rgba(255,255,255,0.8)">工具执行结果 · 回喂 Claude 进入下一轮</div>
+        </div>
+        <div class="card card-purple anim-right d7">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+            <div style="width:40px;height:40px;border-radius:50%;background:rgba(180,130,255,0.2);display:flex;align-items:center;justify-content:center;font-size:1.2rem;color:var(--purple)">🟣</div>
+            <div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:1.1rem;color:var(--purple);font-weight:600">result</div>
+              <div style="font-size:0.85rem;color:rgba(255,255,255,0.5)">terminal</div>
+            </div>
+          </div>
+          <div style="color:rgba(255,255,255,0.8)">任务终止 · 携带轮数、费用、耗时元数据</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 10: 会话开局消息详解页 ==================== -->
+  <div class="slide" data-idx="10">
+    <div class="content">
+      <div class="pill pill-cyan anim-in d1">SYSTEM · INIT</div>
+      <div class="slide-title anim-up d2">会话开局的第一份"体检报告"</div>
+      <div class="dual-col" style="width:100%;margin-top:20px">
+        <div class="card anim-left d3" style="text-align:left">
+          <div class="json-block"><span class="cmt">// 消息流第一帧</span>
+{
+  <span class="key">"type"</span>: <span class="str">"system"</span>,
+  <span class="key">"subtype"</span>: <span class="str">"init"</span>,
+  <span class="key">"session_id"</span>: <span class="str">"a1b2c3d4-..."</span>,
+  <span class="key">"model"</span>: <span class="str">"claude-opus-4-7"</span>,
+  <span class="key">"tools"</span>: [<span class="str">"Read"</span>, <span class="str">"Edit"</span>, <span class="str">"Bash"</span>, <span class="str">"Glob"</span>, <span class="str">"Grep"</span>],
+  <span class="key">"mcp_servers"</span>: [
+    { <span class="key">"name"</span>: <span class="str">"playwright"</span>, <span class="key">"status"</span>: <span class="str">"connected"</span> }
+  ]
+}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div class="card card-gold anim-right d4">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:1.2rem">⭐</span>
+              <div>
+                <div style="font-family:'Orbitron',sans-serif;font-size:1rem;color:var(--gold);font-weight:600">会话 ID</div>
+                <div style="font-size:0.9rem;color:rgba(255,255,255,0.7)"><code>session_id</code> · 唯一标识本次会话</div>
+              </div>
+            </div>
+          </div>
+          <div class="card card-cyan anim-right d5">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:1.2rem">⬡</span>
+              <div>
+                <div style="font-family:'Orbitron',sans-serif;font-size:1rem;color:var(--cyan);font-weight:600">模型版本</div>
+                <div style="font-size:0.9rem;color:rgba(255,255,255,0.7)"><code>model</code> · 当前调用的具体型号</div>
+              </div>
+            </div>
+          </div>
+          <div class="card card-green anim-right d6">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:1.2rem">🔑</span>
+              <div>
+                <div style="font-family:'Orbitron',sans-serif;font-size:1rem;color:var(--green);font-weight:600">可用工具集</div>
+                <div style="font-size:0.9rem;color:rgba(255,255,255,0.7)"><code>tools</code> · 本会话允许调用的所有工具</div>
+              </div>
+            </div>
+          </div>
+          <div class="card card-purple anim-right d7">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:1.2rem">🖥️</span>
+              <div>
+                <div style="font-family:'Orbitron',sans-serif;font-size:1rem;color:var(--purple);font-weight:600">MCP 服务器</div>
+                <div style="font-size:0.9rem;color:rgba(255,255,255,0.7)"><code>mcp_servers</code> · 已连接的外部服务列表</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="alert-box anim-in d8" style="margin-top:15px;font-size:0.9rem">⚠️ 调试 Tips：排错第一步 —— 检查 <code>tools</code> 列表是否完整，确认 MCP 服务器全部 <code>connected</code></div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 11: assistant 消息结构详解 ==================== -->
+  <div class="slide" data-idx="11">
+    <div class="content">
+      <div class="pill pill-gold anim-in d1">ASSISTANT</div>
+      <div class="slide-title anim-up d2">Claude 的每一轮"开口说话"</div>
+      <div style="font-size:1rem;color:rgba(255,255,255,0.5);margin-bottom:20px" class="anim-in d3"><code>content</code> 是一个数组 —— 混合 <code>text</code>（思考输出）与 <code>tool_use</code>（工具调用请求）</div>
+      <div class="dual-col" style="width:100%">
+        <div class="card anim-left d4" style="text-align:left">
+          <div style="font-family:'Orbitron',sans-serif;font-size:1rem;color:var(--gold);margin-bottom:10px">📋 消息结构示例</div>
+          <div class="json-block" style="font-size:0.82rem">{
+  <span class="key">"type"</span>: <span class="str">"assistant"</span>,
+  <span class="key">"content"</span>: [
+    { <span class="key">"type"</span>: <span class="str">"text"</span>, <span class="key">"text"</span>: <span class="str">"我先并行读两个文件..."</span> },
+    {
+      <span class="key">"type"</span>: <span class="str">"tool_use"</span>,
+      <span class="key">"id"</span>: <span class="str">"toolu_01A"</span>,
+      <span class="key">"name"</span>: <span class="str">"Read"</span>,
+      <span class="key">"input"</span>: { <span class="key">"path"</span>: <span class="str">"a.ts"</span> }
+    },
+    {
+      <span class="key">"type"</span>: <span class="str">"tool_use"</span>,
+      <span class="key">"id"</span>: <span class="str">"toolu_01B"</span>,
+      <span class="key">"name"</span>: <span class="str">"Read"</span>,
+      <span class="key">"input"</span>: { <span class="key">"path"</span>: <span class="str">"b.ts"</span> }
+    }
+  ]
+}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div class="card card-gold anim-right d5">
+            <div style="font-family:'JetBrains Mono',monospace;color:var(--gold);font-weight:600;margin-bottom:8px">≡ text block</div>
+            <div style="font-size:0.95rem;color:rgba(255,255,255,0.8)">Claude 的思考、说明、自然语言输出 —— <strong style="color:var(--gold)">给人看的</strong></div>
+          </div>
+          <div class="card card-cyan anim-right d6">
+            <div style="font-family:'JetBrains Mono',monospace;color:var(--cyan);font-weight:600;margin-bottom:8px">🔧 tool_use block</div>
+            <div style="font-size:0.95rem;color:rgba(255,255,255,0.8)">工具调用请求 —— <strong style="color:var(--cyan)">给宿主程序执行的指令</strong></div>
+          </div>
+          <div class="card card-green anim-right d7">
+            <div style="font-family:'JetBrains Mono',monospace;color:var(--green);font-weight:600;margin-bottom:8px">» 并发执行</div>
+            <div style="font-size:0.95rem;color:rgba(255,255,255,0.8)">单条消息可含<strong style="color:var(--green)">多个</strong> <code>tool_use</code> —— 这意味着<strong style="color:var(--green)">并发执行</strong></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 12: user/tool_result 消息配对机制 ==================== -->
+  <div class="slide" data-idx="12">
+    <div class="content">
+      <div class="pill pill-green anim-in d1">USER · TOOL_RESULT</div>
+      <div class="slide-title anim-up d2">id 严格配对 · SDK 自动维护</div>
+      <div class="dual-col" style="width:100%;margin-top:20px">
+        <div class="card card-gold anim-left d3">
+          <div style="font-family:'Orbitron',sans-serif;color:var(--gold);font-weight:600;margin-bottom:10px">ASSISTANT → tool_use</div>
+          <div style="font-size:0.95rem;color:rgba(255,255,255,0.7);margin-bottom:10px">Claude 发起工具调用</div>
+          <div class="json-block" style="font-size:0.85rem"><span class="key">"id"</span>: <span class="str">"toolu_01ABC"</span>,
+<span class="key">"name"</span>: <span class="str">"Read"</span></div>
+        </div>
+        <div class="card card-green anim-right d4">
+          <div style="font-family:'Orbitron',sans-serif;color:var(--green);font-weight:600;margin-bottom:10px">USER → tool_result</div>
+          <div style="font-size:0.95rem;color:rgba(255,255,255,0.7);margin-bottom:10px">宿主回喂执行结果</div>
+          <div class="json-block" style="font-size:0.85rem"><span class="key">"tool_use_id"</span>: <span class="str">"toolu_01ABC"</span>,
+<span class="key">"content"</span>: <span class="str">"file contents..."</span></div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:15px;margin:20px 0" class="anim-in d5">
+        <span style="font-size:1.5rem;color:var(--green)">↔</span>
+        <span style="font-size:1.1rem;color:var(--green);font-weight:600">自动配对</span>
+        <span style="font-family:'JetBrains Mono',monospace;color:var(--gold)">tool_use_id ≡ id</span>
+      </div>
+      <div class="card anim-up d6" style="width:100%;text-align:left">
+        <div style="font-family:'Orbitron',sans-serif;color:var(--cyan);margin-bottom:10px">📝 消息体示例</div>
+        <div class="json-block" style="font-size:0.85rem">{
+  <span class="key">"type"</span>: <span class="str">"user"</span>,
+  <span class="key">"content"</span>: [
+    {
+      <span class="key">"type"</span>: <span class="str">"tool_result"</span>,
+      <span class="key">"tool_use_id"</span>: <span class="str">"toolu_01ABC"</span>,  <span class="cmt">// ← 严格对应上一条 assistant 的 tool_use.id</span>
+      <span class="key">"content"</span>: <span class="str">"export function fetch() { ... }"</span>,
+      <span class="key">"is_error"</span>: <span class="bool">false</span>
+    }
+  ]
+}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 13: result 任务终止信号 ==================== -->
+  <div class="slide" data-idx="13">
+    <div class="content">
+      <div class="pill pill-purple anim-in d1">RESULT</div>
+      <div class="slide-title anim-up d2">result · 任务终止</div>
+      <div style="font-size:1rem;color:rgba(255,255,255,0.5);margin-bottom:20px" class="anim-in d3">消息流终止信号 · 携带元数据 · subtype 描述退出原因</div>
+      <div class="dual-col" style="width:100%">
+        <div class="card anim-left d4" style="text-align:left">
+          <div style="font-family:'Orbitron',sans-serif;color:var(--purple);margin-bottom:10px">📋 终止消息示例</div>
+          <div class="json-block" style="font-size:0.8rem">{
+  <span class="key">"type"</span>: <span class="str">"result"</span>,
+  <span class="key">"subtype"</span>: <span class="str">"success"</span>,
+  <span class="key">"session_id"</span>: <span class="str">"a1b2c3d4-..."</span>,
+  <span class="key">"num_turns"</span>: <span class="num">7</span>,
+  <span class="key">"duration_ms"</span>: <span class="num">12840</span>,
+  <span class="key">"total_cost_usd"</span>: <span class="num">0.0834</span>,
+  <span class="key">"usage"</span>: {
+    <span class="key">"input_tokens"</span>: <span class="num">28450</span>,
+    <span class="key">"output_tokens"</span>: <span class="num">1820</span>,
+    <span class="key">"cache_read_tokens"</span>: <span class="num">24100</span>,
+    <span class="key">"cache_creation_tokens"</span>: <span class="num">3200</span>
+  },
+  <span class="key">"result"</span>: <span class="str">"任务执行完成 ✓"</span>
+}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div style="font-family:'Orbitron',sans-serif;color:var(--gold);font-size:1rem;margin-bottom:5px">🔍 subtype · 五种退出原因</div>
+          <div class="card card-green anim-right d5" style="padding:12px 16px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span style="font-family:'JetBrains Mono',monospace;color:var(--green)">success</span>
+              <span style="color:rgba(255,255,255,0.7)">正常完成</span>
+            </div>
+          </div>
+          <div class="card card-red anim-right d6" style="padding:12px 16px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span style="font-family:'JetBrains Mono',monospace;color:var(--red)">error_max_turns</span>
+              <span style="color:rgba(255,255,255,0.7)">达到轮数上限</span>
+            </div>
+          </div>
+          <div class="card card-red anim-right d6" style="padding:12px 16px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span style="font-family:'JetBrains Mono',monospace;color:var(--red)">error_max_budget_usd</span>
+              <span style="color:rgba(255,255,255,0.7)">达到费用上限</span>
+            </div>
+          </div>
+          <div class="card card-red anim-right d7" style="padding:12px 16px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span style="font-family:'JetBrains Mono',monospace;color:var(--red)">error_during_execution</span>
+              <span style="color:rgba(255,255,255,0.7)">执行中异常</span>
+            </div>
+          </div>
+          <div class="card card-purple anim-right d7" style="padding:12px 16px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span style="font-family:'JetBrains Mono',monospace;color:var(--purple);font-size:0.85rem">error_max_structured_output_retries</span>
+              <span style="color:rgba(255,255,255,0.7)">结构化重试耗尽</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:30px;margin-top:15px;justify-content:center" class="anim-in d8">
+        <div style="text-align:center"><span style="font-size:1.5rem">⏱️</span><div style="font-size:0.85rem;color:rgba(255,255,255,0.6)">耗时</div></div>
+        <div style="text-align:center"><span style="font-size:1.5rem">💰</span><div style="font-size:0.85rem;color:rgba(255,255,255,0.6)">费用</div></div>
+        <div style="text-align:center"><span style="font-size:1.5rem">🔁</span><div style="font-size:0.85rem;color:rgba(255,255,255,0.6)">轮数</div></div>
+        <div style="text-align:center"><span style="font-size:1.5rem">💾</span><div style="font-size:0.85rem;color:rgba(255,255,255,0.6)">缓存</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 14: 八大配置类别总览 ==================== -->
+  <div class="slide" data-idx="14">
+    <div class="content">
+      <div class="pill pill-purple anim-in d1">CLAUDE AGENT OPTIONS</div>
+      <div class="slide-title anim-up d2">编程化全控制 · 八大配置类别</div>
+      <div style="font-size:1rem;color:rgba(255,255,255,0.5);margin-bottom:25px" class="anim-in d3">Headless 命令行参数 → 编程接口，所有能力都能动态切换</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;width:100%">
+        <div class="card card-purple anim-up d4" style="text-align:center">
+          <div style="font-size:1.5rem;margin-bottom:8px">⚙️</div>
+          <div style="font-family:'Orbitron',sans-serif;color:var(--purple);font-weight:600;margin-bottom:5px">模型与执行</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:0.85rem;color:rgba(255,255,255,0.7)"><code>model</code> · <code>max_turns</code></div>
+        </div>
+        <div class="card card-cyan anim-up d4" style="text-align:center">
+          <div style="font-size:1.5rem;margin-bottom:8px">🔑</div>
+          <div style="font-family:'Orbitron',sans-serif;color:var(--cyan);font-weight:600;margin-bottom:5px">工具权限</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:0.85rem;color:rgba(255,255,255,0.7)"><code>allowed_tools</code> · <code>disallowed_tools</code></div>
+        </div>
+        <div class="card card-green anim-up d5" style="text-align:center">
+          <div style="font-size:1.5rem;margin-bottom:8px">🛡️</div>
+          <div style="font-family:'Orbitron',sans-serif;color:var(--green);font-weight:600;margin-bottom:5px">权限模式</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:0.85rem;color:rgba(255,255,255,0.7)"><code>permission_mode</code></div>
+        </div>
+        <div class="card card-gold anim-up d5" style="text-align:center">
+          <div style="font-size:1.5rem;margin-bottom:8px">✏️</div>
+          <div style="font-family:'Orbitron',sans-serif;color:var(--gold);font-weight:600;margin-bottom:5px">提示工程</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:0.85rem;color:rgba(255,255,255,0.7)"><code>system_prompt</code> · <code>append_system_prompt</code></div>
+        </div>
+        <div class="card card-cyan anim-up d6" style="text-align:center">
+          <div style="font-size:1.5rem;margin-bottom:8px">☰</div>
+          <div style="font-family:'Orbitron',sans-serif;color:var(--cyan);font-weight:600;margin-bottom:5px">工作环境</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:0.85rem;color:rgba(255,255,255,0.7)"><code>cwd</code> · <code>env</code></div>
+        </div>
+        <div class="card card-purple anim-up d6" style="text-align:center">
+          <div style="font-size:1.5rem;margin-bottom:8px">💬</div>
+          <div style="font-family:'Orbitron',sans-serif;color:var(--purple);font-weight:600;margin-bottom:5px">会话管理</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:0.85rem;color:rgba(255,255,255,0.7)"><code>resume</code> · <code>fork_session</code></div>
+        </div>
+        <div class="card card-gold anim-up d7" style="text-align:center">
+          <div style="font-size:1.5rem;margin-bottom:8px">⟨⟩</div>
+          <div style="font-family:'Orbitron',sans-serif;color:var(--gold);font-weight:600;margin-bottom:5px">结构化输出</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:0.85rem;color:rgba(255,255,255,0.7)"><code>output_format</code></div>
+        </div>
+        <div class="card card-green anim-up d7" style="text-align:center">
+          <div style="font-size:1.5rem;margin-bottom:8px">🔗</div>
+          <div style="font-family:'Orbitron',sans-serif;color:var(--green);font-weight:600;margin-bottom:5px">MCP 集成</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:0.85rem;color:rgba(255,255,255,0.7)"><code>mcp_servers</code></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 15: 权限模式 · 四种基调 ==================== -->
+  <div class="slide" data-idx="15">
+    <div class="content">
+      <div class="slide-title anim-up d1">权限模式 · 四种基调</div>
+      <div style="font-size:1rem;color:rgba(255,255,255,0.5);margin-bottom:25px" class="anim-in d2"><code>permission_mode</code> · 从标准确认到完全跳过</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;width:100%">
+        <div class="card card-cyan anim-up d3" style="text-align:center">
+          <div style="width:50px;height:50px;border-radius:50%;background:rgba(0,243,255,0.2);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:1.5rem;color:var(--cyan)">🔵</div>
+          <div style="font-family:'JetBrains Mono',monospace;color:var(--cyan);font-weight:600;margin-bottom:8px">default</div>
+          <div style="font-size:0.9rem;color:var(--text);margin-bottom:5px">标准模式</div>
+          <div style="font-size:0.85rem;color:rgba(255,255,255,0.6)">每个工具调用都需用户确认</div>
+          <div style="font-size:0.8rem;color:rgba(255,255,255,0.4);margin-top:8px">适用：常规开发</div>
+        </div>
+        <div class="card card-gold anim-up d4" style="text-align:center">
+          <div style="width:50px;height:50px;border-radius:50%;background:rgba(255,215,0,0.2);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:1.5rem;color:var(--gold)">🟡</div>
+          <div style="font-family:'JetBrains Mono',monospace;color:var(--gold);font-weight:600;margin-bottom:8px">acceptEdits</div>
+          <div style="font-size:0.9rem;color:var(--text);margin-bottom:5px">半自动</div>
+          <div style="font-size:0.85rem;color:rgba(255,255,255,0.6)">文件编辑自动接受，其它操作仍需确认</div>
+          <div style="font-size:0.8rem;color:rgba(255,255,255,0.4);margin-top:8px">适用：批量重构</div>
+        </div>
+        <div class="card card-green anim-up d5" style="text-align:center">
+          <div style="width:50px;height:50px;border-radius:50%;background:rgba(0,200,120,0.2);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:1.5rem;color:var(--green)">🟢</div>
+          <div style="font-family:'JetBrains Mono',monospace;color:var(--green);font-weight:600;margin-bottom:8px">plan</div>
+          <div style="font-size:0.9rem;color:var(--text);margin-bottom:5px">只读规划</div>
+          <div style="font-size:0.85rem;color:rgba(255,255,255,0.6)">只能读不能写，专心制定方案</div>
+          <div style="font-size:0.8rem;color:rgba(255,255,255,0.4);margin-top:8px">适用：架构设计</div>
+        </div>
+        <div class="card card-red anim-up d6" style="text-align:center">
+          <div style="width:50px;height:50px;border-radius:50%;background:rgba(255,77,77,0.2);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:1.5rem;color:var(--red)">🔴</div>
+          <div style="font-family:'JetBrains Mono',monospace;color:var(--red);font-weight:600;margin-bottom:8px">bypassPermissions</div>
+          <div style="font-size:0.9rem;color:var(--text);margin-bottom:5px">跳过检查</div>
+          <div style="font-size:0.85rem;color:rgba(255,255,255,0.6)">完全跳过权限，所有调用直通</div>
+          <div style="font-size:0.8rem;color:rgba(255,255,255,0.4);margin-top:8px">适用：CI 沙箱</div>
+        </div>
+      </div>
+      <div class="alert-box anim-in d7" style="margin-top:20px">⚠️ 重要提醒：<code>bypassPermissions</code> 仅限<strong>完全隔离的沙箱环境</strong> · 生产环境慎用</div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 16: 工具白名单 · 模式匹配语法 ==================== -->
+  <div class="slide" data-idx="16">
+    <div class="content">
+      <div class="slide-title anim-up d1">工具白名单 · 模式匹配语法</div>
+      <div style="font-size:1rem;color:rgba(255,255,255,0.5);margin-bottom:20px" class="anim-in d2"><code>allowed_tools</code> 与 Headless 完全一致 · 支持工具名 / Bash 子集 / MCP 工具</div>
+      <div class="dual-col" style="width:100%">
+        <div class="card anim-left d3" style="text-align:left">
+          <div style="font-family:'Orbitron',sans-serif;color:var(--gold);margin-bottom:10px">🐍 配置示例 (agent_config.py)</div>
+          <div class="code-block" style="font-size:0.85rem"><span class="var">options</span> = <span class="type">ClaudeAgentOptions</span>(
+    <span class="var">allowed_tools</span>=[
+        <span class="str">"Read"</span>,
+        <span class="str">"Grep"</span>,
+        <span class="str">"Glob"</span>,
+        <span class="str">"Bash(git diff *)"</span>,
+        <span class="str">"Bash(npm test *)"</span>,
+        <span class="str">"mcp_database_query"</span>,
+    ],
+    <span class="var">permission_mode</span>=<span class="str">"acceptEdits"</span>,
+)</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div class="card card-green anim-right d4">
+            <div style="display:flex;align-items:flex-start;gap:10px">
+              <span style="color:var(--green);font-size:1.2rem">✓</span>
+              <div>
+                <div style="font-weight:600;color:var(--text);margin-bottom:5px">精确到 Bash 子命令</div>
+                <div style="font-size:0.9rem;color:rgba(255,255,255,0.7)"><code>Bash(git diff *)</code> 允许 · 其它 <code>git commit</code> / <code>push</code> 全部被拦</div>
+              </div>
+            </div>
+          </div>
+          <div class="card card-green anim-right d5">
+            <div style="display:flex;align-items:flex-start;gap:10px">
+              <span style="color:var(--green);font-size:1.2rem">✓</span>
+              <div>
+                <div style="font-weight:600;color:var(--text);margin-bottom:5px">npm 通配限制</div>
+                <div style="font-size:0.9rem;color:rgba(255,255,255,0.7)"><code>Bash(npm test *)</code> 允许 · <code>npm install</code> / <code>publish</code> 一律拒绝</div>
+              </div>
+            </div>
+          </div>
+          <div class="card card-green anim-right d6">
+            <div style="display:flex;align-items:flex-start;gap:10px">
+              <span style="color:var(--green);font-size:1.2rem">✓</span>
+              <div>
+                <div style="font-weight:600;color:var(--text);margin-bottom:5px">MCP 工具精准锁定</div>
+                <div style="font-size:0.9rem;color:rgba(255,255,255,0.7)"><code>mcp_database_query</code> 只读 · 写入工具不在白名单 → 被拒</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="pill pill-gold anim-in d7" style="margin-top:15px;font-size:1rem;padding:8px 24px">🔐 最小权限原则</div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 17: session_id · 跨调用记忆延续 ==================== -->
+  <div class="slide" data-idx="17">
+    <div class="content">
+      <div class="slide-title anim-up d1">session_id · 跨调用记忆延续</div>
+      <div style="font-size:1rem;color:rgba(255,255,255,0.5);margin-bottom:25px" class="anim-in d2">从 <code>init</code> 取回 <code>session_id</code> · <code>resume</code> 传回 · Claude 自动恢复完整上下文</div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:30px;width:100%">
+        <div class="card card-cyan anim-left d3" style="flex:1;text-align:center">
+          <div style="width:40px;height:40px;border-radius:50%;background:var(--cyan);display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-family:'Orbitron',sans-serif;font-weight:800;color:var(--dark)">1</div>
+          <div style="font-family:'Orbitron',sans-serif;color:var(--cyan);font-weight:600;margin-bottom:8px">分析问题</div>
+          <div class="code-block" style="font-size:0.85rem"><span class="fn">query</span>(<span class="str">"分析这个 bug"</span>)
+→ <span class="fn">result</span>(<span class="var">session_id</span>=<span class="str">"abc123"</span>)</div>
+        </div>
+        <div style="font-size:2rem;color:var(--gold)">→</div>
+        <div class="card card-gold anim-up d4" style="flex:1;text-align:center">
+          <div style="width:40px;height:40px;border-radius:50%;background:var(--gold);display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-family:'Orbitron',sans-serif;font-weight:800;color:var(--dark)">2</div>
+          <div style="font-family:'Orbitron',sans-serif;color:var(--gold);font-weight:600;margin-bottom:8px">指定修复</div>
+          <div class="code-block" style="font-size:0.85rem"><span class="fn">query</span>(<span class="str">"修复方向 A"</span>, <span class="var">resume</span>=<span class="str">"abc123"</span>)
+→ <span class="cmt">沿用上下文</span></div>
+        </div>
+        <div style="font-size:2rem;color:var(--gold)">→</div>
+        <div class="card card-green anim-right d5" style="flex:1;text-align:center">
+          <div style="width:40px;height:40px;border-radius:50%;background:var(--green);display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-family:'Orbitron',sans-serif;font-weight:800;color:var(--dark)">3</div>
+          <div style="font-family:'Orbitron',sans-serif;color:var(--green);font-weight:600;margin-bottom:8px">验证修复</div>
+          <div class="code-block" style="font-size:0.85rem"><span class="fn">query</span>(<span class="str">"跑一下测试"</span>, <span class="var">resume</span>=<span class="str">"abc123"</span>)
+→ <span class="cmt">完整记忆</span></div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:20px" class="anim-in d6">
+        <span style="font-family:'JetBrains Mono',monospace;color:var(--cyan);font-size:0.9rem">session_id = abc123</span>
+      </div>
+      <div class="alert-box-green anim-in d7" style="margin-top:15px">✅ 完整上下文连贯 · 无需手动重述前情 · 告别失忆</div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 18: fork_session · 会话分叉 ==================== -->
+  <div class="slide" data-idx="18">
+    <div class="content">
+      <div class="slide-title anim-up d1">fork_session · 会话分叉</div>
+      <div style="font-size:1rem;color:rgba(255,255,255,0.5);margin-bottom:25px" class="anim-in d2">同一时间点拉出独立副本 · 原会话保持不变 · 并行探索多方向</div>
+      <div style="text-align:center;margin-bottom:20px" class="anim-up d3">
+        <div class="card card-purple" style="display:inline-block;padding:16px 30px">
+          <div style="font-family:'Orbitron',sans-serif;color:var(--purple);font-weight:600">🔄 原 session · 完成代码分析</div>
+          <div style="font-family:'JetBrains Mono',monospace;color:rgba(255,255,255,0.6);font-size:0.9rem;margin-top:5px">session_id = "abc123"</div>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:center;gap:20px;margin:10px 0" class="anim-in d4">
+        <div style="width:2px;height:30px;background:linear-gradient(to bottom,var(--purple),transparent)"></div>
+      </div>
+      <div class="dual-col" style="width:100%">
+        <div class="card card-gold anim-left d5">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+            <span style="font-family:'Orbitron',sans-serif;background:var(--gold);color:var(--dark);padding:4px 12px;border-radius:4px;font-weight:700;font-size:0.9rem">A</span>
+            <span style="font-family:'Orbitron',sans-serif;color:var(--gold);font-weight:600">微服务重构</span>
+          </div>
+          <div style="font-size:0.9rem;color:rgba(255,255,255,0.5);margin-bottom:10px">new session · 独立演化</div>
+          <div class="code-block" style="font-size:0.85rem"><span class="fn">query</span>(
+  <span class="str">"按微服务拆分：订单 / 库存 / 支付"</span>,
+  <span class="var">resume</span>=<span class="str">"abc123"</span>,
+  <span class="var">fork_session</span>=<span class="bool">True</span>
+)</div>
+        </div>
+        <div class="card card-green anim-right d6">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+            <span style="font-family:'Orbitron',sans-serif;background:var(--green);color:var(--dark);padding:4px 12px;border-radius:4px;font-weight:700;font-size:0.9rem">B</span>
+            <span style="font-family:'Orbitron',sans-serif;color:var(--green);font-weight:600">安全加固</span>
+          </div>
+          <div style="font-size:0.9rem;color:rgba(255,255,255,0.5);margin-bottom:10px">new session · 独立演化</div>
+          <div class="code-block" style="font-size:0.85rem"><span class="fn">query</span>(
+  <span class="str">"加上 JWT 鉴权 + SQL 注入防护"</span>,
+  <span class="var">resume</span>=<span class="str">"abc123"</span>,
+  <span class="var">fork_session</span>=<span class="bool">True</span>
+)</div>
+        </div>
+      </div>
+      <div class="alert-box-green anim-in d7" style="margin-top:15px">✅ 两分支完全独立，互不污染 · 原 <code>session</code> 保持原状，可继续主线任务</div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 19: 自定义工具 · @tool 装饰器 ==================== -->
+  <div class="slide" data-idx="19">
+    <div class="content">
+      <div class="slide-title anim-up d1">自定义工具 · @tool 装饰器</div>
+      <div style="font-size:1rem;color:rgba(255,255,255,0.5);margin-bottom:20px" class="anim-in d2">把业务函数注册成 Claude 可调用的工具，进程内运行、零 IPC 开销</div>
+      <div class="dual-col" style="width:100%">
+        <div class="card anim-left d3" style="text-align:left">
+          <div style="font-family:'Orbitron',sans-serif;color:var(--gold);margin-bottom:10px">🐍 工具定义 (tools.py)</div>
+          <div class="code-block" style="font-size:0.82rem;line-height:1.7"><span class="cmt"># 1. 装饰器声明单个工具</span>
+<span class="dec">@tool</span>(
+    <span class="var">name</span>=<span class="str">"query_db"</span>,
+    <span class="var">description</span>=<span class="str">"按订单号查询数据库"</span>,
+    <span class="var">parameters</span>={<span class="str">"order_id"</span>: <span class="str">"str"</span>}
+)
+<span class="kw">async def</span> <span class="fn">query_db</span>(<span class="var">order_id</span>: <span class="type">str</span>):
+    <span class="kw">return</span> <span class="kw">await</span> <span class="var">db</span>.<span class="fn">find</span>(<span class="var">order_id</span>)
+
+<span class="cmt"># 2. 打包成进程内 MCP 服务器</span>
+<span class="kw">from</span> claude_agent_sdk <span class="kw">import</span> <span class="fn">create_sdk_mcp_server</span>
+<span class="var">biz</span> = <span class="fn">create_sdk_mcp_server</span>(
+    <span class="var">name</span>=<span class="str">"biz"</span>,
+    <span class="var">tools</span>=[<span class="var">query_db</span>, <span class="var">call_api</span>, <span class="var">notify</span>]
+)
+
+<span class="cmt"># 3. 注册进 options</span>
+<span class="var">options</span> = <span class="type">ClaudeAgentOptions</span>(<span class="var">mcp_servers</span>={<span class="str">"biz"</span>: <span class="var">biz</span>})</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div class="card card-gold anim-right d4">
+            <div style="font-family:'JetBrains Mono',monospace;color:var(--gold);font-weight:600;margin-bottom:8px">📦 @tool 扁平注册</div>
+            <div style="font-size:0.95rem;color:rgba(255,255,255,0.8)">一行声明 <code>name / description / parameters</code>，函数体即工具实现</div>
+          </div>
+          <div class="card card-cyan anim-right d5">
+            <div style="font-family:'JetBrains Mono',monospace;color:var(--cyan);font-weight:600;margin-bottom:8px">➕ create_sdk_mcp_server</div>
+            <div style="font-size:0.95rem;color:rgba(255,255,255,0.8)">多个 <code>@tool</code> 打包成一个 MCP 服务器，统一挂载</div>
+          </div>
+          <div class="card card-green anim-right d6">
+            <div style="font-family:'JetBrains Mono',monospace;color:var(--green);font-weight:600;margin-bottom:8px">⚡ 进程内运行</div>
+            <div style="font-size:0.95rem;color:rgba(255,255,255,0.8)">跑在当前进程，无进程间通信开销，毫秒级响应</div>
+          </div>
+        </div>
+      </div>
+      <div style="font-size:0.95rem;color:rgba(255,255,255,0.5);margin-top:15px" class="anim-in d7">→ Agent → 进程内 MCP 服务器 → [query_db, call_api, notify]</div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 20: 工具设计 · 三大原则 ==================== -->
+  <div class="slide" data-idx="20">
+    <div class="content">
+      <div class="pill pill-gold anim-in d1">大佬提醒</div>
+      <div class="slide-title anim-up d2">工具设计 · 三大原则</div>
+      <div style="font-size:1rem;color:rgba(255,255,255,0.5);margin-bottom:25px" class="anim-in d3">工具是 Claude 的能力延伸，每一项都要谨慎对待</div>
+      <div class="grid-3" style="width:100%">
+        <div class="card card-gold anim-up d4" style="text-align:left">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+            <span style="font-size:1.5rem">🎯</span>
+            <div style="font-family:'Orbitron',sans-serif;color:var(--gold);font-weight:600">原则 01：单一职责</div>
+          </div>
+          <div style="font-size:0.95rem;color:rgba(255,255,255,0.8);margin-bottom:10px">每个工具只做一件事。<strong style="color:var(--red)">不要设计"万能查询"</strong> —— 边界越宽，误用风险越高</div>
+          <div class="code-block" style="font-size:0.8rem"><span class="cmt"># bad</span>
+<span class="fn">do_anything</span>(<span class="var">action</span>, <span class="var">target</span>)
+
+<span class="cmt"># good</span>
+<span class="fn">get_order</span>(<span class="var">order_id</span>)
+<span class="fn">cancel_order</span>(<span class="var">order_id</span>)</div>
+        </div>
+        <div class="card card-cyan anim-up d5" style="text-align:left">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+            <span style="font-size:1.5rem">📋</span>
+            <div style="font-family:'Orbitron',sans-serif;color:var(--cyan);font-weight:600">原则 02：描述清晰</div>
+          </div>
+          <div style="font-size:0.95rem;color:rgba(255,255,255,0.8);margin-bottom:10px"><code>description</code> 是写给 <strong style="color:var(--cyan)">Claude 看的使用指南</strong>。明确 <strong>"何时可用"</strong> 与 <strong>"何时禁用"</strong></div>
+          <div class="code-block" style="font-size:0.8rem"><span class="dec">@tool</span>(<span class="var">name</span>=<span class="str">"refund"</span>, <span class="var">description</span>=<span class="str">"""
+仅订单状态=已完成时退款
+禁止：处理中、争议中订单
+"""</span>)</div>
+        </div>
+        <div class="card card-green anim-up d6" style="text-align:left">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+            <span style="font-size:1.5rem">🛡️</span>
+            <div style="font-family:'Orbitron',sans-serif;color:var(--green);font-weight:600">原则 03：零信任验证</div>
+          </div>
+          <div style="font-size:0.95rem;color:rgba(255,255,255,0.8);margin-bottom:10px">永远校验输入。Claude 可能传入任何字符串，<strong style="color:var(--red)">不要假设它正确</strong></div>
+          <div class="code-block" style="font-size:0.8rem"><span class="kw">async def</span> <span class="fn">refund</span>(<span class="var">order_id</span>):
+    <span class="kw">if not</span> <span class="var">ORDER_RE</span>.<span class="fn">match</span>(<span class="var">order_id</span>):
+        <span class="kw">raise</span> <span class="type">ValueError</span>(...)
+    <span class="kw">if not</span> <span class="kw">await</span> <span class="fn">is_finished</span>(<span class="var">order_id</span>):
+        <span class="kw">return</span> {<span class="str">"error"</span>: <span class="str">"..."</span>}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 21: Hooks 演进 · 配置 → 编程 ==================== -->
+  <div class="slide" data-idx="21">
+    <div class="content">
+      <div class="slide-title anim-up d1">Hooks 演进 · <span style="color:var(--cyan)">配置</span> → <span style="color:var(--purple)">编程</span></div>
+      <div style="font-size:1rem;color:rgba(255,255,255,0.5);margin-bottom:20px" class="anim-in d2">第5章的 Shell Hooks 是 JSON 配置 + 脚本；SDK 把它升级为原生编程接口</div>
+      <table class="styled-table anim-up d3" style="width:100%">
+        <thead>
+          <tr>
+            <th style="width:15%">维度</th>
+            <th style="width:42%;color:var(--cyan)">Shell Hooks (第5章)</th>
+            <th style="width:42%;color:var(--purple)">SDK Hooks (升级版)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="font-weight:600;color:var(--gold)">定义方式</td>
+            <td>JSON 配置 + Shell 脚本</td>
+            <td style="color:var(--purple)">原生 Python / TypeScript 函数</td>
+          </tr>
+          <tr>
+            <td style="font-weight:600;color:var(--gold)">执行环境</td>
+            <td>独立子进程</td>
+            <td style="color:var(--green)">主进程内闭包</td>
+          </tr>
+          <tr>
+            <td style="font-weight:600;color:var(--gold)">数据交换</td>
+            <td><code>stdin</code> / <code>stdout</code> 序列化 JSON</td>
+            <td style="color:var(--green)">直接函数参数 + 返回值</td>
+          </tr>
+          <tr>
+            <td style="font-weight:600;color:var(--gold)">异步支持</td>
+            <td style="color:var(--red)">❌ 不支持，阻塞 stdio</td>
+            <td style="color:var(--green)">✅ 原生 <code>async</code> / <code>await</code></td>
+          </tr>
+          <tr>
+            <td style="font-weight:600;color:var(--gold)">调试体验</td>
+            <td style="color:var(--red)">⚠️ 只能 <code>print</code> 打日志</td>
+            <td style="color:var(--green)">✅ 断点 · 单步 · 完整 traceback</td>
+          </tr>
+          <tr>
+            <td style="font-weight:600;color:var(--gold)">适用场景</td>
+            <td>CLI 用户的本地配置 / 团队规则</td>
+            <td style="color:var(--purple)">嵌入式应用 / 服务端集成</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="pill pill-gold anim-in d4" style="margin-top:15px;font-size:1rem;padding:10px 24px">🔁 一句话总结：嵌入式应用用 <strong style="color:var(--purple)">SDK Hooks</strong>，纯 CLI 工作流才用 <strong style="color:var(--cyan)">Shell Hooks</strong></div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 22: 4 道安全防线 · 层层拦截 ==================== -->
+  <div class="slide" data-idx="22">
+    <div class="content">
+      <div class="pill pill-green anim-in d1">纵深防御</div>
+      <div class="slide-title anim-up d2">4 道安全防线 · 层层拦截</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;width:100%;margin-top:25px">
+        <div class="card card-purple anim-up d3" style="text-align:center">
+          <div style="font-family:'Orbitron',sans-serif;font-size:2rem;color:var(--purple);margin-bottom:10px">①</div>
+          <div style="font-family:'Orbitron',sans-serif;color:var(--purple);font-weight:600;margin-bottom:8px">全局</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:0.9rem;color:var(--text);margin-bottom:10px">permission_mode</div>
+          <div style="font-size:0.85rem;color:rgba(255,255,255,0.6)">全局开关：default / acceptEdits / plan / bypass</div>
+          <div class="code-block" style="font-size:0.8rem;margin-top:10px"><span class="var">permission_mode</span>=<span class="str">"acceptEdits"</span></div>
+        </div>
+        <div class="card card-cyan anim-up d4" style="text-align:center">
+          <div style="font-family:'Orbitron',sans-serif;font-size:2rem;color:var(--cyan);margin-bottom:10px">②</div>
+          <div style="font-family:'Orbitron',sans-serif;color:var(--cyan);font-weight:600;margin-bottom:8px">工具级</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:0.9rem;color:var(--text);margin-bottom:10px">allowed_tools</div>
+          <div style="font-size:0.85rem;color:rgba(255,255,255,0.6)">白名单：只允许枚举到的工具被调用</div>
+          <div class="code-block" style="font-size:0.8rem;margin-top:10px"><span class="var">allowed_tools</span>=[<span class="str">"Read"</span>, <span class="str">"Grep"</span>]</div>
+        </div>
+        <div class="card card-gold anim-up d5" style="text-align:center">
+          <div style="font-family:'Orbitron',sans-serif;font-size:2rem;color:var(--gold);margin-bottom:10px">③</div>
+          <div style="font-family:'Orbitron',sans-serif;color:var(--gold);font-weight:600;margin-bottom:8px">运行时</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:0.9rem;color:var(--text);margin-bottom:10px">canUseTool</div>
+          <div style="font-size:0.85rem;color:rgba(255,255,255,0.6)">回调函数：返回 allow / deny 二元判断</div>
+          <div class="code-block" style="font-size:0.8rem;margin-top:10px"><span class="kw">async def</span> <span class="fn">can_use</span>(<span class="var">t</span>, <span class="var">i</span>):
+    <span class="kw">return</span> {<span class="str">"behavior"</span>: <span class="str">"allow"</span>}</div>
+        </div>
+        <div class="card card-green anim-up d6" style="text-align:center">
+          <div style="font-family:'Orbitron',sans-serif;font-size:2rem;color:var(--green);margin-bottom:10px">④</div>
+          <div style="font-family:'Orbitron',sans-serif;color:var(--green);font-weight:600;margin-bottom:8px">最细</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:0.9rem;color:var(--text);margin-bottom:10px">PreToolUse Hooks</div>
+          <div style="font-size:0.85rem;color:rgba(255,255,255,0.6)">最细粒度：参数级审查，可改写 / 阻断</div>
+          <div class="code-block" style="font-size:0.8rem;margin-top:10px"><span class="var">hooks</span>={
+  <span class="str">"PreToolUse"</span>: [<span class="var">audit_args</span>]
+}</div>
+        </div>
+      </div>
+      <div class="alert-box-green anim-in d7" style="margin-top:20px">🔒 协同生效原则：任何危险调用必须 <strong>同时</strong> 通过 4 关，越过任何一道都会被拦下</div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 23: 结构化输出 · JSON Schema 强约束 ==================== -->
+  <div class="slide" data-idx="23">
+    <div class="content">
+      <div class="slide-title anim-up d1">结构化输出 · <span style="color:var(--gold)">JSON Schema</span> 强约束</div>
+      <div style="font-size:1rem;color:rgba(255,255,255,0.5);margin-bottom:20px" class="anim-in d2">声明 <code>output_format</code>，Claude 输出自动按 schema 验证，失败自动重试</div>
+      <div class="dual-col" style="width:100%">
+        <div class="card card-gold anim-left d3" style="text-align:left">
+          <div style="font-family:'Orbitron',sans-serif;color:var(--gold);margin-bottom:10px">🐍 Python · Pydantic</div>
+          <div class="code-block" style="font-size:0.85rem"><span class="kw">from</span> pydantic <span class="kw">import</span> <span class="type">BaseModel</span>
+
+<span class="kw">class</span> <span class="type">OrderInfo</span>(<span class="type">BaseModel</span>):
+    <span class="var">order_id</span>: <span class="type">str</span>
+    <span class="var">amount</span>: <span class="type">float</span>
+    <span class="var">status</span>: <span class="type">str</span>
+
+<span class="var">options</span> = <span class="type">ClaudeAgentOptions</span>(
+    <span class="var">output_format</span>=<span class="type">OrderInfo</span>,  <span class="cmt"># ← 自动校验 · 失败重试</span>
+)
+<span class="cmt"># result.parsed → OrderInfo</span></div>
+        </div>
+        <div class="card card-cyan anim-right d4" style="text-align:left">
+          <div style="font-family:'Orbitron',sans-serif;color:var(--cyan);margin-bottom:10px">📜 TypeScript · Zod</div>
+          <div class="code-block" style="font-size:0.85rem"><span class="kw">import</span> { <span class="var">z</span> } <span class="kw">from</span> <span class="str">"zod"</span>;
+
+<span class="kw">const</span> <span class="type">OrderInfo</span> = <span class="var">z</span>.<span class="fn">object</span>({
+  <span class="var">order_id</span>: <span class="var">z</span>.<span class="fn">string</span>(),
+  <span class="var">amount</span>: <span class="var">z</span>.<span class="fn">number</span>(),
+  <span class="var">status</span>: <span class="var">z</span>.<span class="fn">string</span>(),
+});
+
+<span class="kw">const</span> <span class="var">options</span> = {
+  <span class="var">outputFormat</span>: <span class="type">OrderInfo</span>,
+};
+<span class="cmt">// result.parsed → z.infer&lt;typeof OrderInfo&gt;</span></div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:15px;margin-top:20px" class="anim-up d5">
+        <span class="pill pill-gold">Claude 输出</span>
+        <span style="color:var(--gold)">→</span>
+        <span class="pill pill-cyan">schema 验证</span>
+        <span style="color:var(--gold)">→</span>
+        <span class="pill pill-green">✅ success</span>
+        <span style="color:rgba(255,255,255,0.3)">/</span>
+        <span class="pill pill-red">❌ 自动重试</span>
+        <span style="color:var(--gold)">→</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:0.85rem;color:var(--red)">error_max_structured_output_retries</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 24: 实战 · 代码分析 Web 服务 ==================== -->
+  <div class="slide" data-idx="24">
+    <div class="content">
+      <div class="pill pill-cyan anim-in d1">实战演练</div>
+      <div class="slide-title anim-up d2">实战 · 代码分析 Web 服务</div>
+      <div style="font-size:1rem;color:rgba(255,255,255,0.5);margin-bottom:20px" class="anim-in d3">FastAPI 接收请求 · SSE 推流 · 浏览器逐字浮现</div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:15px;margin-bottom:20px" class="anim-up d4">
+        <div class="card card-cyan" style="padding:12px 20px;text-align:center">
+          <div style="font-size:1.3rem">🖥️</div>
+          <div style="font-size:0.85rem;color:var(--cyan)">浏览器</div>
+          <div style="font-size:0.75rem;color:rgba(255,255,255,0.5)">表单提交 UI</div>
+        </div>
+        <span style="color:var(--gold);font-size:1.5rem">→</span>
+        <div class="card card-gold" style="padding:12px 20px;text-align:center">
+          <div style="font-size:1.3rem">📡</div>
+          <div style="font-size:0.85rem;color:var(--gold)">POST /analyze</div>
+          <div style="font-size:0.75rem;color:rgba(255,255,255,0.5)">FastAPI 路由</div>
+        </div>
+        <span style="color:var(--gold);font-size:1.5rem">→</span>
+        <div class="card card-purple" style="padding:12px 20px;text-align:center">
+          <div style="font-size:1.3rem">🌀</div>
+          <div style="font-size:0.85rem;color:var(--purple)">query()</div>
+          <div style="font-size:0.75rem;color:rgba(255,255,255,0.5)">异步消息流</div>
+        </div>
+        <span style="color:var(--gold);font-size:1.5rem">→</span>
+        <div class="card card-green" style="padding:12px 20px;text-align:center">
+          <div style="font-size:1.3rem">📶</div>
+          <div style="font-size:0.85rem;color:var(--green)">SSE 推流</div>
+          <div style="font-size:0.75rem;color:rgba(255,255,255,0.5)">StreamingResponse</div>
+        </div>
+        <span style="color:var(--gold);font-size:1.5rem">→</span>
+        <div class="card card-cyan" style="padding:12px 20px;text-align:center">
+          <div style="font-size:1.3rem">📝</div>
+          <div style="font-size:0.85rem;color:var(--cyan)">EventSource</div>
+          <div style="font-size:0.75rem;color:rgba(255,255,255,0.5)">逐字浮现</div>
+        </div>
+      </div>
+      <div class="card anim-up d5" style="width:100%;text-align:left">
+        <div style="font-family:'Orbitron',sans-serif;color:var(--gold);margin-bottom:10px">🐍 FastAPI 核心代码 (main.py)</div>
+        <div class="code-block" style="font-size:0.9rem"><span class="dec">@app</span>.<span class="fn">post</span>(<span class="str">"/api/analyze"</span>)
+<span class="kw">async def</span> <span class="fn">analyze</span>(<span class="var">req</span>: <span class="type">AnalyzeReq</span>):
+    <span class="kw">async def</span> <span class="fn">event_stream</span>():
+        <span class="kw">async for</span> <span class="var">msg</span> <span class="kw">in</span> <span class="fn">query</span>(<span class="var">prompt</span>=<span class="var">req</span>.<span class="var">code</span>, <span class="var">options</span>=<span class="var">opts</span>):
+            <span class="kw">if</span> <span class="var">msg</span>.<span class="var">type</span> == <span class="str">"assistant"</span>:
+                <span class="kw">yield</span> <span class="str">f"data: {</span><span class="var">msg</span>.<span class="var">text</span><span class="str">}\n\n"</span>
+    <span class="kw">return</span> <span class="type">StreamingResponse</span>(
+        <span class="fn">event_stream</span>(),
+        <span class="var">media_type</span>=<span class="str">"text/event-stream"</span>
+    )</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 25: SDK vs CLI · 场景对照 ==================== -->
+  <div class="slide" data-idx="25">
+    <div class="content">
+      <div class="pill pill-purple anim-in d1">选型决策</div>
+      <div class="slide-title anim-up d2">SDK vs CLI · 场景对照</div>
+      <div style="font-size:1rem;color:rgba(255,255,255,0.5);margin-bottom:20px" class="anim-in d3">经验法则 · 一行 Shell 描述用 CLI；写 if/else 或循环用 SDK</div>
+      <table class="styled-table anim-up d4" style="width:100%">
+        <thead>
+          <tr>
+            <th style="width:35%">场景</th>
+            <th style="width:15%">推荐</th>
+            <th style="width:50%">原因</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>CI/CD 单步任务</td>
+            <td><span class="pill pill-cyan" style="margin:0">CLI</span></td>
+            <td>单行命令直接调用，无需写代码</td>
+          </tr>
+          <tr>
+            <td>Shell 脚本自动化</td>
+            <td><span class="pill pill-cyan" style="margin:0">CLI</span></td>
+            <td>管道组合、易于嵌入 bash/zsh</td>
+          </tr>
+          <tr>
+            <td>构建 Web / 桌面 AI 应用</td>
+            <td><span class="pill pill-purple" style="margin:0">SDK</span></td>
+            <td>需要 HTTP/WebSocket、UI 状态管理</td>
+          </tr>
+          <tr>
+            <td>需要自定义工具</td>
+            <td><span class="pill pill-purple" style="margin:0">SDK</span></td>
+            <td><code>@tool</code> 装饰器 + 进程内 MCP</td>
+          </tr>
+          <tr>
+            <td>多轮对话会话</td>
+            <td><span class="pill pill-purple" style="margin:0">SDK</span></td>
+            <td>维护 <code>session</code>、上下文状态</td>
+          </tr>
+          <tr>
+            <td>精细控制消息流</td>
+            <td><span class="pill pill-purple" style="margin:0">SDK</span></td>
+            <td>逐条 message 拦截、过滤、改写</td>
+          </tr>
+          <tr>
+            <td>高并发任务管理</td>
+            <td><span class="pill pill-purple" style="margin:0">SDK</span></td>
+            <td><code>asyncio</code> 并发、线程池、连接复用</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="pill pill-gold anim-in d5" style="margin-top:15px;font-size:1rem;padding:10px 24px">🔑 选型口诀：一行 Shell 可描述 → <strong style="color:var(--cyan)">CLI</strong>；写 <code>if/else</code> 或循环 → <strong style="color:var(--purple)">SDK</strong></div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 26: 本章小结 · Agent SDK 全景 ==================== -->
+  <div class="slide" data-idx="26">
+    <div class="content">
+      <div class="pill pill-gold anim-in d1">本章小结</div>
+      <div class="slide-title anim-up d2">Agent SDK · 全景</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;width:100%;margin-top:20px">
+        <div class="card card-cyan anim-left d3">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+            <span style="font-size:1.5rem">🌀</span>
+            <div style="font-family:'Orbitron',sans-serif;color:var(--cyan);font-weight:600;font-size:1.1rem">query 函数</div>
+          </div>
+          <div style="font-size:0.95rem;color:rgba(255,255,255,0.8);margin-bottom:10px">异步消息流 · 一次调用，逐条产出</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <span class="pill pill-cyan" style="font-size:0.8rem">system</span>
+            <span class="pill pill-gold" style="font-size:0.8rem">assistant</span>
+            <span class="pill pill-green" style="font-size:0.8rem">user</span>
+            <span class="pill pill-purple" style="font-size:0.8rem">result</span>
+          </div>
+        </div>
+        <div class="card card-purple anim-right d4">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+            <span style="font-size:1.5rem">⚙️</span>
+            <div style="font-family:'Orbitron',sans-serif;color:var(--purple);font-weight:600;font-size:1.1rem">ClaudeAgentOptions</div>
+          </div>
+          <div style="font-size:0.95rem;color:rgba(255,255,255,0.8);margin-bottom:10px">8 大配置 · 模型 / 工具 / 权限动态可调</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <span class="pill pill-purple" style="font-size:0.8rem">model</span>
+            <span class="pill pill-purple" style="font-size:0.8rem">allowed_tools</span>
+            <span class="pill pill-purple" style="font-size:0.8rem">permission_mode</span>
+            <span class="pill pill-purple" style="font-size:0.8rem">mcp_servers</span>
+          </div>
+        </div>
+        <div class="card card-gold anim-left d5">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+            <span style="font-size:1.5rem">🔧</span>
+            <div style="font-family:'Orbitron',sans-serif;color:var(--gold);font-weight:600;font-size:1.1rem">自定义工具</div>
+          </div>
+          <div style="font-size:0.95rem;color:rgba(255,255,255,0.8);margin-bottom:10px"><code>@tool</code> 装饰器 · 进程内 MCP · 扩展能力</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <span class="pill pill-gold" style="font-size:0.8rem">@tool</span>
+            <span class="pill pill-gold" style="font-size:0.8rem">in-process MCP</span>
+            <span class="pill pill-gold" style="font-size:0.8rem">业务接入</span>
+          </div>
+        </div>
+        <div class="card card-green anim-right d6">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+            <span style="font-size:1.5rem">🛡️</span>
+            <div style="font-family:'Orbitron',sans-serif;color:var(--green);font-weight:600;font-size:1.1rem">4 道安全防线</div>
+          </div>
+          <div style="font-size:0.95rem;color:rgba(255,255,255,0.8);margin-bottom:10px">纵深防御 · 守住边界 · 风险可控</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <span class="pill pill-green" style="font-size:0.8rem">权限</span>
+            <span class="pill pill-green" style="font-size:0.8rem">沙箱</span>
+            <span class="pill pill-green" style="font-size:0.8rem">钩子</span>
+            <span class="pill pill-green" style="font-size:0.8rem">审计</span>
+          </div>
+        </div>
+      </div>
+      <div style="background:linear-gradient(135deg,rgba(255,215,0,0.15),rgba(255,215,0,0.05));border:1px solid rgba(255,215,0,0.3);border-radius:12px;padding:16px 30px;margin-top:20px;text-align:center" class="anim-in d7">
+        <div style="font-size:1.1rem;color:var(--gold);font-weight:600">🌟 本章核心跃迁：从 <strong>"使用 Claude"</strong> 到 <strong>"构建以 Claude 为引擎的应用"</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 27: 下章预告 · Plugins 生态 ==================== -->
+  <div class="slide" data-idx="27">
+    <div class="content">
+      <div class="pill pill-purple anim-in d1">下章预告</div>
+      <div class="slide-title anim-up d2">Plugins · 生态</div>
+      <div class="card card-purple anim-scale d3" style="max-width:700px;text-align:center;padding:40px">
+        <div style="font-size:3rem;margin-bottom:15px">🔌</div>
+        <div style="font-family:'Orbitron',sans-serif;font-size:1.8rem;color:var(--purple);font-weight:700;margin-bottom:15px">Plugins 生态</div>
+        <div style="font-size:1.1rem;color:rgba(255,255,255,0.8);margin-bottom:10px">• 把命令、规范、子智能体、工具打包成标准容器</div>
+        <div style="font-size:1.1rem;color:rgba(255,255,255,0.8)">• 一行安装即可完成团队和企业的能力分发</div>
+        <div style="margin-top:20px">
+          <span style="color:var(--purple);font-size:1.5rem">→</span>
+          <span style="color:rgba(255,255,255,0.5);font-size:1rem;margin-left:10px">第 9 章即将展开</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 28: 预留页 ==================== -->
+  <div class="slide" data-idx="28">
+    <div class="content">
+      <div class="pill pill-gold anim-in d1">CHAPTER · 08</div>
+      <div class="slide-title anim-up d2">预留内容页</div>
+      <div style="font-size:1.2rem;color:rgba(255,255,255,0.5);margin-top:20px" class="anim-in d3">后续内容将补充至此</div>
+      <div style="margin-top:40px" class="anim-scale d4">
+        <div style="width:120px;height:120px;border-radius:50%;border:2px dashed rgba(255,215,0,0.3);display:flex;align-items:center;justify-content:center;margin:0 auto">
+          <span style="font-size:3rem;color:rgba(255,215,0,0.3)">+</span>
+        </div>
+      </div>
+      <div style="font-size:0.9rem;color:rgba(255,255,255,0.3);margin-top:20px" class="anim-in d5">Agent SDK · From Tool to Component</div>
+    </div>
+  </div>
+
+</div><!-- /deck -->
+
+<!-- NAV -->
+<div class="nav" id="nav">
+  <button id="prevBtn" title="上一页">‹</button>
+  <div class="dots" id="dots"></div>
+  <div class="page-info" id="pageInfo">1 / 28</div>
+  <button id="nextBtn" title="下一页">›</button>
+</div>
+
+<script>
+// ========== SNOWFLAKE GENERATOR ==========
+(function createSnow() {
+  const field = document.getElementById('snowfield');
+  const count = 45;
+  for (let i = 0; i < count; i++) {
+    const flake = document.createElement('div');
+    flake.className = 'snowflake';
+    const size = 1.5 + Math.random() * 4;
+    const left = Math.random() * 100;
+    const dur = 10 + Math.random() * 18;
+    const sway = 3 + Math.random() * 6;
+    const delay = Math.random() * dur;
+    const opacity = 0.15 + Math.random() * 0.5;
+    flake.style.cssText =
+      'width:' + size + 'px;height:' + size + 'px;' +
+      'left:' + left + '%;' +
+      'opacity:' + opacity + ';' +
+      'animation-duration:' + dur + 's,' + sway + 's;' +
+      'animation-delay:' + delay + 's,' + (delay * 0.4) + 's;';
+    field.appendChild(flake);
+  }
+})();
+
+// ========== DECK ENGINE ==========
+const slides = Array.from(document.querySelectorAll('.slide'));
+const totalSlides = slides.length;
+let current = 0;
+
+const dotsContainer = document.getElementById('dots');
+const pageInfo = document.getElementById('pageInfo');
+const prevBtn = document.getElementById('prevBtn');
+const nextBtn = document.getElementById('nextBtn');
+
+// Create dots
+slides.forEach((_, i) => {
+  const dot = document.createElement('div');
+  dot.className = 'dot' + (i === 0 ? ' active' : '');
+  dot.addEventListener('click', () => goTo(i));
+  dotsContainer.appendChild(dot);
+});
+
+function goTo(idx) {
+  if (idx < 0 || idx >= totalSlides) return;
+  slides[current].classList.remove('active');
+  current = idx;
+  slides[current].classList.add('active');
+  // Reset animations
+  slides[current].querySelectorAll('[class*="anim-"]').forEach(el => {
+    el.style.animation = 'none';
+    el.offsetHeight;
+    el.style.animation = '';
+  });
+  updateNav();
+  savePos();
+}
+
+function updateNav() {
+  const slideNum = current + 1;
+  pageInfo.textContent = slideNum + ' / ' + totalSlides;
+  dotsContainer.querySelectorAll('.dot').forEach((d, i) => {
+    d.classList.toggle('active', i === current);
+  });
+}
+
+prevBtn.addEventListener('click', () => goTo(current - 1));
+nextBtn.addEventListener('click', () => goTo(current + 1));
+
+// Keyboard nav
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') {
+    e.preventDefault();
+    goTo(current + 1);
+  }
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    goTo(current - 1);
+  }
+  if (e.key === 'Home') { e.preventDefault(); goTo(0); }
+  if (e.key === 'End')  { e.preventDefault(); goTo(totalSlides - 1); }
+});
+
+// Persist position
+function savePos() {
+  try { localStorage.setItem('ch8-slide', current); } catch(e) {}
+}
+function loadPos() {
+  try {
+    const saved = parseInt(localStorage.getItem('ch8-slide'), 10);
+    if (!isNaN(saved) && saved >= 0 && saved < totalSlides) {
+      goTo(saved);
+      return true;
+    }
+  } catch(e) {}
+  return false;
+}
+
+// Responsive scale
+function rescale() {
+  const deck = document.getElementById('deck');
+  const padX = 40, padY = 120;
+  const scale = Math.min(
+    (window.innerWidth - padX) / 1920,
+    (window.innerHeight - padY) / 1080
+  );
+  deck.style.transform = 'scale(' + (scale * 1.15) + ')';
+}
+window.addEventListener('resize', rescale);
+rescale();
+
+// Init
+if (!loadPos()) goTo(0);
+</script>
+</body>
+</html>

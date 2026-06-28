@@ -1,0 +1,1501 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1920">
+<title>Chapter 9 · Plugins 生态</title>
+<style>
+/* ===== 基础样式 ===== */
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Noto+Sans+SC:wght@300;400;500;700&family=JetBrains+Mono:wght@300;400;500&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --gold:#FFD700;--cyan:#00F3FF;--magenta:#FF00C8;--red:#FF4D4D;
+  --green:#00C878;--purple:#B482FF;--dark:#0A0A0A;--dark-card:rgba(15,15,20,0.85);
+  --grid:rgba(40,40,40,0.4);--text:#E8E8E8;--text-dim:rgba(255,255,255,0.55);
+  --gold-glow:rgba(255,215,0,0.6);--cyan-glow:rgba(0,243,255,0.6);--magenta-glow:rgba(255,0,200,0.6);
+}
+body{
+  background:var(--dark);color:#fff;
+  font-family:'Inter','Noto Sans SC','JetBrains Mono',sans-serif;
+  font-size:18px;line-height:1.7;
+  overflow:hidden;height:100vh;
+  display:flex;justify-content:center;align-items:center;
+}
+/* ===== 背景 ===== */
+body::before{
+  content:"";position:fixed;inset:0;
+  background:
+    linear-gradient(rgba(40,40,40,0.4) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(40,40,40,0.4) 1px,transparent 1px);
+  background-size:32px 32px;z-index:0;
+  animation:gridPulse 6s infinite alternate;
+}
+@keyframes gridPulse{0%{opacity:0.6}100%{opacity:0.85}}
+/* ===== 雪花 ===== */
+#snowfield{position:fixed;inset:0;z-index:1;pointer-events:none;overflow:hidden}
+.snowflake{
+  position:fixed;border-radius:50%;background:white;
+  pointer-events:none;z-index:1;
+  animation:snowfall linear infinite,snowSway ease-in-out infinite;
+}
+@keyframes snowfall{
+  0%{top:-8px;opacity:0}5%{opacity:1}92%{opacity:0.8}100%{top:105vh;opacity:0}
+}
+@keyframes snowSway{
+  0%,100%{transform:translateX(0) rotate(0deg)}
+  25%{transform:translateX(18px) rotate(90deg)}
+  50%{transform:translateX(-12px) rotate(180deg)}
+  75%{transform:translateX(22px) rotate(270deg)}
+}
+/* ===== 幻灯片容器 ===== */
+.deck{
+  position:relative;width:1920px;height:1080px;
+  margin:0 auto;z-index:2;
+}
+.slide{
+  position:absolute;top:0;left:0;width:100%;height:100%;
+  display:none;flex-direction:column;
+  align-items:center;justify-content:center;
+  padding:80px 120px 100px;text-align:center;
+  overflow:hidden;
+}
+.slide.active{display:flex !important}
+.slide:not(.active){display:none !important}
+/* ===== 内容区 ===== */
+.content{
+  flex:1;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:30px;
+  width:100%;
+}
+/* ===== 封面 ===== */
+.cover{text-align:center;justify-content:center;align-items:center}
+.cover .chap{
+  font-family:'Orbitron',sans-serif;font-size:1.3rem;
+  color:rgba(255,255,255,0.45);letter-spacing:6px;margin-bottom:20px;
+}
+.cover h1{
+  font-family:'Orbitron',sans-serif;font-size:4rem;font-weight:800;
+  color:#fff;text-shadow:0 0 60px rgba(255,215,0,0.3);
+  line-height:1.3;margin-bottom:10px;
+}
+.cover h1 span{
+  background:linear-gradient(135deg,#fff 0%,#fff 60%,rgba(255,215,0,0.8) 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+}
+.cover .sub{
+  font-family:'Orbitron',sans-serif;font-size:1.8rem;
+  color:var(--gold);font-weight:700;margin-top:10px;
+}
+.cover .en{
+  font-family:'Orbitron',sans-serif;font-size:1rem;
+  color:rgba(255,255,255,0.2);margin-top:15px;
+  text-transform:uppercase;letter-spacing:4px;
+}
+/* ===== 标题 ===== */
+.slide-title{
+  font-family:'Orbitron',sans-serif;font-size:2.4rem;
+  color:var(--gold);text-align:center;font-weight:700;
+  text-shadow:0 0 30px rgba(255,215,0,0.3);margin-bottom:10px;
+}
+.slide-sub{
+  font-size:1.1rem;color:rgba(255,255,255,0.5);
+  text-align:center;margin-top:-15px;margin-bottom:10px;
+}
+/* ===== 双栏 ===== */
+.dual-col{display:grid;grid-template-columns:1fr 1fr;gap:30px}
+/* ===== 卡片 ===== */
+.card{
+  background:var(--dark-card);border-radius:16px;
+  padding:28px 32px;border:1px solid rgba(255,215,0,0.1);
+}
+.card-cyan{border-color:rgba(0,243,255,0.2)}
+.card-gold{border-color:rgba(255,215,0,0.2)}
+.card-red{border-color:rgba(255,77,77,0.2)}
+.card-green{border-color:rgba(0,200,120,0.2)}
+.card-purple{border-color:rgba(180,130,255,0.2)}
+.card h3{
+  font-family:'Orbitron',sans-serif;font-size:1.2rem;
+  color:var(--gold);margin-bottom:12px;font-weight:600;
+}
+.card p{font-size:1rem;color:rgba(255,255,255,0.8);line-height:1.7}
+.card-header{
+  font-family:'Orbitron',sans-serif;font-size:1rem;
+  color:var(--cyan);font-weight:600;margin-bottom:10px;
+}
+/* ===== 项目符号 ===== */
+.bullet-item{
+  display:flex;align-items:flex-start;gap:12px;
+  margin-bottom:10px;font-size:1rem;
+}
+.bullet-dot{
+  width:10px;height:10px;border-radius:50%;
+  background:var(--gold);margin-top:8px;flex-shrink:0;
+}
+/* ===== 标签 ===== */
+.pill{
+  display:inline-block;padding:4px 14px;border-radius:20px;
+  font-size:0.85rem;font-weight:600;margin-bottom:10px;
+}
+.pill-cyan{background:rgba(0,243,255,0.15);color:var(--cyan)}
+.pill-gold{background:rgba(255,215,0,0.15);color:var(--gold)}
+.pill-green{background:rgba(0,200,120,0.15);color:var(--green)}
+.pill-red{background:rgba(255,77,77,0.15);color:var(--red)}
+.pill-purple{background:rgba(180,130,255,0.15);color:var(--purple)}
+/* ===== 三栏/四栏 ===== */
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+/* ===== 流程箭头 ===== */
+.flow-arrow{
+  font-family:'Orbitron',sans-serif;font-size:1.5rem;
+  color:var(--gold);text-align:center;margin:5px 0;
+}
+/* ===== 底部引语 ===== */
+.bottom-quote{
+  font-size:1rem;color:rgba(255,255,255,0.4);
+  text-align:center;font-style:italic;margin-top:10px;
+  padding-top:15px;
+}
+/* ===== 代码块 ===== */
+.code-block{
+  background:rgba(10,10,10,0.9);border:1px solid rgba(255,215,0,0.1);
+  border-radius:10px;padding:18px 22px;
+  font-family:'JetBrains Mono',monospace;font-size:0.9rem;
+  color:#e0e0e0;line-height:1.6;overflow-x:auto;white-space:pre;
+  text-align:left;
+}
+.code-block .kw{color:#ff79c6}
+.code-block .fn{color:#50fa7b}
+.code-block .str{color:#f1fa8c}
+.code-block .cmt{color:#6272a4}
+.code-block .num{color:#bd93f9}
+.code-block .op{color:#ff79c6}
+.code-block .var{color:#8be9fd}
+.code-block .dec{color:#ffb86c}
+.code-block .type{color:#8be9fd}
+.code-block .bool{color:#bd93f9}
+/* ===== JSON 语法高亮 ===== */
+.json-block{
+  background:rgba(10,10,10,0.85);border-radius:10px;
+  padding:18px 22px;font-family:'JetBrains Mono',monospace;
+  font-size:0.85rem;color:#e0e0e0;line-height:1.6;
+  overflow-x:auto;white-space:pre;text-align:left;
+}
+.json-block .key{color:#8be9fd}
+.json-block .str{color:#f1fa8c}
+.json-block .num{color:#bd93f9}
+.json-block .bool{color:#bd93f9}
+.json-block .cmt{color:#6272a4}
+/* ===== Shell 命令高亮 ===== */
+.shell-block{
+  background:rgba(10,10,10,0.9);border:1px solid rgba(0,243,255,0.2);
+  border-radius:10px;padding:18px 22px;
+  font-family:'JetBrains Mono',monospace;font-size:0.9rem;
+  color:#e0e0e0;line-height:1.6;overflow-x:auto;white-space:pre;
+  text-align:left;
+}
+.shell-block .prompt{color:#50fa7b}
+.shell-block .cmd{color:#8be9fd}
+.shell-block .flag{color:#ff79c6}
+.shell-block .arg{color:#f1fa8c}
+.shell-block .cmt{color:#6272a4}
+/* ===== 警告框 ===== */
+.alert-box{
+  background:rgba(255,77,77,0.1);border:1px solid rgba(255,77,77,0.3);
+  border-radius:12px;padding:14px 20px;
+  font-size:1rem;color:var(--red);text-align:center;
+}
+.alert-box-green{
+  background:rgba(0,200,120,0.1);border:1px solid rgba(0,200,120,0.3);
+  border-radius:12px;padding:14px 20px;
+  font-size:1rem;color:var(--green);text-align:center;
+}
+/* ===== 统计卡 ===== */
+.stat-card{
+  background:var(--dark-card);border-radius:14px;
+  padding:20px 24px;text-align:center;
+  border:1px solid rgba(255,215,0,0.1);
+}
+.stat-card .num{
+  font-family:'Orbitron',sans-serif;font-size:2rem;
+  font-weight:800;color:var(--gold);
+}
+.stat-card .label{
+  font-size:0.95rem;color:rgba(255,255,255,0.6);margin-top:5px;
+}
+/* ===== 表格 ===== */
+.styled-table{
+  width:100%;border-collapse:collapse;
+  font-size:0.95rem;
+}
+.styled-table th{
+  background:rgba(255,215,0,0.1);color:var(--gold);
+  padding:12px 16px;text-align:center;font-weight:600;
+  border-bottom:2px solid rgba(255,215,0,0.2);
+}
+.styled-table td{
+  padding:10px 16px;border-bottom:1px solid rgba(255,255,255,0.05);
+  color:rgba(255,255,255,0.8);
+}
+.styled-table tr:hover td{
+  background:rgba(255,255,255,0.02);
+}
+/* ===== 导航 ===== */
+.nav{
+  position:fixed;bottom:30px;left:50%;transform:translateX(-50%);
+  display:flex;align-items:center;gap:20px;z-index:100;
+  background:rgba(10,10,10,0.9);border:1px solid rgba(255,255,255,0.1);
+  border-radius:40px;padding:10px 28px;backdrop-filter:blur(10px);
+}
+.nav button{
+  background:none;border:1px solid rgba(255,255,255,0.2);
+  color:#fff;width:40px;height:40px;border-radius:50%;
+  cursor:pointer;font-size:1.1rem;
+  display:flex;align-items:center;justify-content:center;
+  transition:all 0.2s;
+}
+.nav button:hover{
+  border-color:var(--cyan);color:var(--cyan);
+  box-shadow:0 0 10px var(--cyan-glow);
+}
+.nav .page-info{
+  font-family:'JetBrains Mono',monospace;font-size:0.85rem;
+  color:rgba(255,255,255,0.5);min-width:80px;text-align:center;
+}
+.nav .dots{display:flex;gap:6px}
+.nav .dot{
+  width:8px;height:8px;border-radius:50%;
+  background:rgba(255,255,255,0.2);cursor:pointer;transition:all 0.3s;
+}
+.nav .dot.active{
+  background:var(--cyan);box-shadow:0 0 8px var(--cyan-glow);
+}
+/* ===== 动画 ===== */
+.anim-up{animation:fadeInUp 0.6s ease-out both}
+.anim-in{animation:fadeIn 0.6s ease-out both}
+.anim-scale{animation:scaleIn 0.7s ease-out both}
+.anim-left{animation:slideInLeft 0.6s ease-out both}
+.anim-right{animation:slideInRight 0.6s ease-out both}
+.d1{animation-delay:0.1s}.d2{animation-delay:0.25s}
+.d3{animation-delay:0.4s}.d4{animation-delay:0.55s}
+.d5{animation-delay:0.7s}.d6{animation-delay:0.85s}
+.d7{animation-delay:1.0s}.d8{animation-delay:1.15s}
+@keyframes fadeInUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes scaleIn{from{opacity:0;transform:scale(0.85)}to{opacity:1;transform:scale(1)}}
+@keyframes slideInLeft{from{opacity:0;transform:translateX(-40px)}to{opacity:1;transform:translateX(0)}}
+@keyframes slideInRight{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}
+/* ===== 页脚 ===== */
+.page-footer{
+  position:absolute;bottom:30px;left:0;right:0;
+  text-align:center;font-size:0.8rem;color:rgba(255,255,255,0.3);
+}
+/* ===== 特殊组件 ===== */
+.flow-step{
+  background:var(--dark-card);border-radius:12px;
+  padding:12px 20px;text-align:center;
+  border:1px solid rgba(255,215,0,0.1);
+  font-size:0.95rem;
+}
+.flow-step-num{
+  font-family:'Orbitron',sans-serif;font-size:1.5rem;
+  font-weight:800;margin-bottom:5px;
+}
+.dir-tree{
+  background:rgba(10,10,10,0.85);border-radius:10px;
+  padding:22px 28px;font-family:'JetBrains Mono',monospace;
+  font-size:0.9rem;color:#e0e0e0;line-height:1.8;
+  text-align:left;white-space:pre;
+}
+.dir-tree .dir{color:var(--cyan)}
+.dir-tree .file{color:rgba(255,255,255,0.8)}
+.dir-tree .hl{color:var(--gold);font-weight:600}
+.dir-tree .note{color:var(--text-dim);font-style:italic}
+/* ===== 金色横幅 ===== */
+.gold-banner{
+  background:linear-gradient(135deg,rgba(255,215,0,0.15),rgba(255,215,0,0.05));
+  border:1px solid rgba(255,215,0,0.3);border-radius:12px;
+  padding:16px 30px;text-align:center;
+}
+/* ===== 步骤编号圆圈 ===== */
+.step-circle{
+  width:44px;height:44px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Orbitron',sans-serif;font-weight:800;
+  font-size:1.1rem;flex-shrink:0;
+}
+/* ===== 文件路径标签 ===== */
+.file-path{
+  font-family:'JetBrains Mono',monospace;font-size:0.9rem;
+  padding:6px 16px;border-radius:8px;
+  background:rgba(10,10,10,0.8);border:1px solid rgba(255,255,255,0.1);
+  display:inline-block;margin-bottom:10px;
+}
+</style>
+</head>
+<body>
+<!-- SNOWFLAKES -->
+<div id="snowfield"></div>
+
+<!-- DECK -->
+<div class="deck" id="deck">
+
+  <!-- ==================== SLIDE 1: 封面页 ==================== -->
+  <div class="slide active" data-idx="1">
+    <div class="content cover">
+      <div class="chap anim-in d1">CHAPTER · 09</div>
+      <h1 class="anim-up d2"><span>Claude Code Harness</span></h1>
+      <div class="sub anim-up d3">核心要点 / 解析指南</div>
+      <div class="cover-divider anim-in d4" style="width:120px;height:2px;background:linear-gradient(90deg,transparent,var(--gold),transparent);margin:20px auto"></div>
+      <div class="sub anim-up d5" style="color:var(--gold)">第 9 章：Plugins 生态</div>
+      <div class="en anim-in d6">Plugins Ecosystem & Distribution</div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 2: 章节导览页 ==================== -->
+  <div class="slide" data-idx="2">
+    <div class="content">
+      <div class="slide-title anim-up d1">章节导览</div>
+      <div class="slide-sub anim-in d2">第八章回顾 → 本章重点</div>
+      <div class="dual-col" style="width:100%;margin-top:20px">
+        <div class="card card-cyan anim-left d3">
+          <div class="card-header" style="color:var(--cyan)">📘 第八章回顾</div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--cyan)"></div><div><code>query</code> 入口与异步消息流</div></div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--cyan)"></div><div><code>Options</code> 八大配置维度</div></div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--cyan)"></div><div>自定义工具与四道安全防线</div></div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--cyan)"></div><div>SDK 把 Claude 嵌入自有代码</div></div>
+        </div>
+        <div class="card card-purple anim-right d4">
+          <div class="card-header" style="color:var(--purple)">🎯 本章重点</div>
+          <div style="font-family:'Orbitron',sans-serif;font-size:2.5rem;font-weight:800;background:linear-gradient(135deg,var(--gold),#fff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin:10px 0">Plugins 生态</div>
+          <div style="font-size:1.3rem;color:var(--gold);font-weight:600;margin:10px 0">• 分发维度</div>
+          <div style="color:rgba(255,255,255,0.7)">让能力像代码一样高效流通</div>
+        </div>
+      </div>
+      <div class="bottom-quote anim-in d5">一行命令，整套工作流就位</div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 3: 真实场景 · GitHub 宝藏仓库 ==================== -->
+  <div class="slide" data-idx="3">
+    <div class="content">
+      <div class="pill pill-purple anim-in d1">[ 真实场景 ]</div>
+      <div class="slide-title anim-up d2">GitHub 上的宝藏仓库</div>
+      <div class="dual-col" style="width:100%;margin-top:20px">
+        <div class="card anim-left d3" style="text-align:left">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:15px">
+            <span style="font-size:1.5rem">📦</span>
+            <span style="font-family:'JetBrains Mono',monospace;color:var(--text);font-size:0.95rem">github.com / awesome-dev</span>
+          </div>
+          <div style="font-family:'Orbitron',sans-serif;font-size:1.2rem;color:#fff;font-weight:700;margin-bottom:10px">react-fullstack-claude-toolkit</div>
+          <div style="display:flex;gap:15px;margin-bottom:15px">
+            <span class="pill pill-gold" style="margin:0">★ 2.4k</span>
+            <span class="pill pill-green" style="margin:0">🏆 最佳实践</span>
+          </div>
+          <div style="font-size:1rem;color:var(--gold);font-style:italic;padding:12px 16px;border-left:3px solid var(--gold);background:rgba(255,215,0,0.05);border-radius:0 8px 8px 0">"直接拿来用就好了……"</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div class="card card-cyan anim-right d4">
+            <div style="font-family:'Orbitron',sans-serif;color:var(--cyan);font-weight:600;margin-bottom:8px">🔍 仓库里包含</div>
+          </div>
+          <div class="card card-gold anim-right d5">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:1.3rem">📘</span>
+              <div>
+                <div style="font-family:'Orbitron',sans-serif;color:var(--gold);font-weight:600">Skills</div>
+                <div style="font-size:0.9rem;color:rgba(255,255,255,0.7)">代码审查 / 组件文档 / 测试</div>
+              </div>
+            </div>
+          </div>
+          <div class="card card-green anim-right d6">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:1.3rem">⚡</span>
+              <div>
+                <div style="font-family:'Orbitron',sans-serif;color:var(--green);font-weight:600">Hooks</div>
+                <div style="font-size:0.9rem;color:rgba(255,255,255,0.7)">自动格式化 + PR 检查</div>
+              </div>
+            </div>
+          </div>
+          <div class="card card-purple anim-right d7">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:1.3rem">🔌</span>
+              <div>
+                <div style="font-family:'Orbitron',sans-serif;color:var(--purple);font-weight:600"><code>.mcp.json</code></div>
+                <div style="font-size:0.9rem;color:rgba(255,255,255,0.7)">GitHub API + Linear 接口</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 4: 碎片化分发的痛苦 ==================== -->
+  <div class="slide" data-idx="4">
+    <div class="content">
+      <div class="pill pill-red anim-in d1">现实很骨感</div>
+      <div class="slide-title anim-up d2">碎片化分发的<span style="color:var(--red)">痛苦</span></div>
+      <div class="dual-col" style="width:100%;margin-top:20px">
+        <div class="card card-red anim-left d3" style="text-align:left">
+          <div style="font-family:'Orbitron',sans-serif;color:var(--red);font-weight:600;margin-bottom:12px">📁 FILES SCATTERED</div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--red)"></div><div><code>.claude/skills/</code></div></div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--red)"></div><div><code>hooks/*.sh</code></div></div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--red)"></div><div><code>.mcp.json</code></div></div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--red)"></div><div><code>commands/*.md</code></div></div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--red)"></div><div><code>agents/*.json</code></div></div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--red)"></div><div><code>README.md</code></div></div>
+          <div class="alert-box" style="margin-top:12px;font-size:0.85rem">⚠️ 手动复制每个文件 · 理清安装方式 · 祈祷依赖完整</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div class="card anim-right d4" style="border-color:rgba(255,215,0,0.3)">
+            <div style="display:flex;align-items:center;gap:12px">
+              <div class="step-circle" style="background:var(--gold);color:var(--dark)">①</div>
+              <div>
+                <div style="font-weight:600;color:var(--gold)">下午开工</div>
+                <div style="font-size:0.9rem;color:rgba(255,255,255,0.6)">满怀期待</div>
+              </div>
+            </div>
+          </div>
+          <div class="card anim-right d5" style="border-color:rgba(0,243,255,0.3)">
+            <div style="display:flex;align-items:center;gap:12px">
+              <div class="step-circle" style="background:var(--cyan);color:var(--dark)">②</div>
+              <div>
+                <div style="font-weight:600;color:var(--cyan)">逐个复制</div>
+                <div style="font-size:0.9rem;color:rgba(255,255,255,0.6)">目录、配置、依赖</div>
+              </div>
+            </div>
+          </div>
+          <div class="card anim-right d6" style="border-color:rgba(255,77,77,0.3)">
+            <div style="display:flex;align-items:center;gap:12px">
+              <div class="step-circle" style="background:var(--red);color:#fff">③</div>
+              <div>
+                <div style="font-weight:600;color:var(--red)">报错失败</div>
+                <div style="font-size:0.9rem;color:rgba(255,255,255,0.6)">少了某个依赖</div>
+              </div>
+            </div>
+          </div>
+          <div class="card anim-right d7" style="border-color:rgba(255,77,77,0.2)">
+            <div style="display:flex;align-items:center;gap:12px">
+              <div class="step-circle" style="background:rgba(255,77,77,0.3);color:var(--red)">④</div>
+              <div>
+                <div style="font-weight:600;color:var(--red)">放弃</div>
+                <div style="font-size:0.9rem;color:rgba(255,255,255,0.6)">一下午没了</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="gold-banner anim-in d8" style="margin-top:15px">
+        <span style="font-size:1.1rem;color:var(--gold);font-weight:700">💥 仅安装顺序，就要一下午</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 5: 标准化分发机制 ==================== -->
+  <div class="slide" data-idx="5">
+    <div class="content">
+      <div class="pill pill-gold anim-in d1">[ 大佬说 ]</div>
+      <div class="slide-title anim-up d2">标准化分发机制</div>
+      <div class="grid-3" style="width:100%;margin-top:20px">
+        <div class="card card-purple anim-left d3" style="text-align:center">
+          <div style="font-size:2.5rem;margin-bottom:10px">📦</div>
+          <div style="font-family:'Orbitron',sans-serif;font-size:1.5rem;color:var(--purple);font-weight:700;margin-bottom:8px">npm</div>
+          <div style="color:rgba(255,255,255,0.7)">JavaScript</div>
+          <div style="font-size:0.9rem;color:rgba(255,255,255,0.5)">包管理</div>
+        </div>
+        <div class="card card-gold anim-scale d4" style="text-align:center;border-width:2px;box-shadow:0 0 30px rgba(255,215,0,0.15)">
+          <div style="font-size:2.5rem;margin-bottom:10px">🧩</div>
+          <div style="font-family:'Orbitron',sans-serif;font-size:1.5rem;color:var(--gold);font-weight:700;margin-bottom:8px">Plugins</div>
+          <div style="color:rgba(255,255,255,0.7)">Claude Code</div>
+          <div style="font-size:0.9rem;color:var(--gold)">扩展分发</div>
+        </div>
+        <div class="card card-cyan anim-right d5" style="text-align:center">
+          <div style="font-size:2.5rem;margin-bottom:10px">🐍</div>
+          <div style="font-family:'Orbitron',sans-serif;font-size:1.5rem;color:var(--cyan);font-weight:700;margin-bottom:8px">pip</div>
+          <div style="color:rgba(255,255,255,0.7)">Python</div>
+          <div style="font-size:0.9rem;color:rgba(255,255,255,0.5)">包管理</div>
+        </div>
+      </div>
+      <div class="shell-block anim-in d6" style="margin-top:20px;max-width:800px;text-align:center"><span class="prompt">$</span> <span class="cmd">/plugin install</span> <span class="arg">team-toolkit@our-company</span></div>
+      <div style="font-size:0.95rem;color:rgba(255,255,255,0.5);margin-top:10px" class="anim-in d7">✅ 一行命令，所有 <code>Skills</code> / <code>Hooks</code> / <code>MCP</code> 就位</div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 6: 六大扩展 · 共同短板 ==================== -->
+  <div class="slide" data-idx="6">
+    <div class="content">
+      <div class="slide-title anim-up d1">六大扩展 · 共同短板</div>
+      <div class="dual-col" style="width:100%;margin-top:20px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div class="card card-cyan anim-up d2" style="text-align:center;padding:20px">
+            <div style="font-size:1.5rem;margin-bottom:8px">📄</div>
+            <div style="font-family:'Orbitron',sans-serif;color:var(--cyan);font-weight:600;font-size:0.95rem">CLAUDE.md</div>
+            <div style="font-size:0.85rem;color:rgba(255,255,255,0.6)">记忆管理</div>
+          </div>
+          <div class="card card-purple anim-up d2" style="text-align:center;padding:20px">
+            <div style="font-size:1.5rem;margin-bottom:8px">👤</div>
+            <div style="font-family:'Orbitron',sans-serif;color:var(--purple);font-weight:600;font-size:0.95rem">Subagent</div>
+            <div style="font-size:0.85rem;color:rgba(255,255,255,0.6)">任务委派</div>
+          </div>
+          <div class="card card-gold anim-up d3" style="text-align:center;padding:20px">
+            <div style="font-size:1.5rem;margin-bottom:8px">⚙️</div>
+            <div style="font-family:'Orbitron',sans-serif;color:var(--gold);font-weight:600;font-size:0.95rem">Skills</div>
+            <div style="font-size:0.85rem;color:rgba(255,255,255,0.6)">领域工作流</div>
+          </div>
+          <div class="card card-green anim-up d3" style="text-align:center;padding:20px">
+            <div style="font-size:1.5rem;margin-bottom:8px">⚡</div>
+            <div style="font-family:'Orbitron',sans-serif;color:var(--green);font-weight:600;font-size:0.95rem">Hooks</div>
+            <div style="font-size:0.85rem;color:rgba(255,255,255,0.6)">事件驱动</div>
+          </div>
+          <div class="card card-purple anim-up d4" style="text-align:center;padding:20px">
+            <div style="font-size:1.5rem;margin-bottom:8px">🔌</div>
+            <div style="font-family:'Orbitron',sans-serif;color:var(--purple);font-weight:600;font-size:0.95rem">MCP</div>
+            <div style="font-size:0.85rem;color:rgba(255,255,255,0.6)">外部服务</div>
+          </div>
+          <div class="card card-cyan anim-up d4" style="text-align:center;padding:20px">
+            <div style="font-size:1.5rem;margin-bottom:8px">⟨⟩</div>
+            <div style="font-family:'Orbitron',sans-serif;color:var(--cyan);font-weight:600;font-size:0.95rem">Headless / SDK</div>
+            <div style="font-size:0.85rem;color:rgba(255,255,255,0.6)">编程调用</div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div class="card card-red anim-right d5">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+              <span style="font-size:1.3rem">⚠️</span>
+              <span style="font-family:'Orbitron',sans-serif;color:var(--red);font-weight:600">共同短板</span>
+            </div>
+            <div style="font-family:'Orbitron',sans-serif;font-size:1.5rem;color:#fff;font-weight:700;margin-bottom:8px">彼此割裂</div>
+            <div style="font-size:0.95rem;color:rgba(255,255,255,0.7)">六大机制各自为政，难以整体打包分发</div>
+          </div>
+          <div class="card anim-right d6" style="border-color:rgba(255,215,0,0.3);background:rgba(255,215,0,0.08)">
+            <div style="font-size:1.1rem;color:var(--gold);font-weight:600;text-align:center">➜ 经验分享 → 迁移作业</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 7: 一个 Plugin · 五类组件 ==================== -->
+  <div class="slide" data-idx="7">
+    <div class="content">
+      <div class="slide-title anim-up d1">一个 Plugin · 五类组件</div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin:20px 0" class="anim-scale d2">
+        <div style="width:100px;height:100px;border-radius:50%;border:3px solid var(--purple);box-shadow:0 0 40px rgba(180,130,255,0.3);display:flex;align-items:center;justify-content:center">
+          <span style="font-size:2.5rem">🧩</span>
+        </div>
+        <div style="font-family:'Orbitron',sans-serif;font-size:2rem;color:var(--purple);font-weight:700">Plugin</div>
+      </div>
+      <div class="grid-5" style="display:grid;grid-template-columns:repeat(5,1fr);gap:16px;width:100%">
+        <div class="card card-cyan anim-up d3" style="text-align:center;padding:20px">
+          <div style="font-size:1.5rem;margin-bottom:8px">🔹</div>
+          <div style="font-family:'Orbitron',sans-serif;color:var(--cyan);font-weight:600;font-size:0.95rem">Commands</div>
+          <div style="font-size:0.85rem;color:rgba(255,255,255,0.6);margin-top:5px">自定义斜杠命令</div>
+        </div>
+        <div class="card card-green anim-up d4" style="text-align:center;padding:20px">
+          <div style="font-size:1.5rem;margin-bottom:8px">🤖</div>
+          <div style="font-family:'Orbitron',sans-serif;color:var(--green);font-weight:600;font-size:0.95rem">Agents</div>
+          <div style="font-size:0.85rem;color:rgba(255,255,255,0.6);margin-top:5px">预配置子智能体</div>
+        </div>
+        <div class="card card-gold anim-up d5" style="text-align:center;padding:20px">
+          <div style="font-size:1.5rem;margin-bottom:8px">📘</div>
+          <div style="font-family:'Orbitron',sans-serif;color:var(--gold);font-weight:600;font-size:0.95rem">Skills</div>
+          <div style="font-size:0.85rem;color:rgba(255,255,255,0.6);margin-top:5px">领域知识包</div>
+        </div>
+        <div class="card card-red anim-up d6" style="text-align:center;padding:20px">
+          <div style="font-size:1.5rem;margin-bottom:8px">⚡</div>
+          <div style="font-family:'Orbitron',sans-serif;color:var(--red);font-weight:600;font-size:0.95rem">Hooks</div>
+          <div style="font-size:0.85rem;color:rgba(255,255,255,0.6);margin-top:5px">自动化行为</div>
+        </div>
+        <div class="card card-purple anim-up d7" style="text-align:center;padding:20px">
+          <div style="font-size:1.5rem;margin-bottom:8px">🔌</div>
+          <div style="font-family:'Orbitron',sans-serif;color:var(--purple);font-weight:600;font-size:0.95rem">MCP</div>
+          <div style="font-size:0.85rem;color:rgba(255,255,255,0.6);margin-top:5px">外部工具连接</div>
+        </div>
+      </div>
+      <div class="shell-block anim-in d8" style="margin-top:20px;max-width:700px;text-align:center"><span class="prompt">$</span> <span class="cmd">/plugin install</span> <span class="arg">team-toolkit@our-company</span></div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 8: 目录树与物理约束 ==================== -->
+  <div class="slide" data-idx="8">
+    <div class="content">
+      <div class="slide-title anim-up d1">目录树与物理约束</div>
+      <div class="dual-col" style="width:100%;margin-top:20px">
+        <div class="card anim-left d2" style="text-align:left">
+          <div style="font-family:'Orbitron',sans-serif;color:var(--gold);font-weight:600;margin-bottom:12px">📁 <code>react-workflow</code> / 目录树</div>
+          <div class="dir-tree"><span class="dir">react-workflow/</span>
+├── <span class="hl">.claude-plugin/</span>       <span class="note">← 唯一必需子目录</span>
+│   └── <span class="hl">plugin.json</span>         <span class="note">← 清单文件</span>
+├── <span class="file">commands/</span>             <span class="note">← 斜杠命令</span>
+├── <span class="file">agents/</span>               <span class="note">← 子智能体</span>
+├── <span class="file">skills/</span>               <span class="note">← Skills</span>
+├── <span class="file">hooks/</span>                <span class="note">← Hooks 配置</span>
+├── <span class="hl" style="color:var(--purple)">.mcp.json</span>             <span class="note">← MCP 配置</span>
+└── <span class="file">README.md</span></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div class="card card-cyan anim-right d3">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+              <span style="font-size:1.3rem">🔒</span>
+              <span style="font-family:'Orbitron',sans-serif;color:var(--cyan);font-weight:600">物理约束</span>
+            </div>
+            <div style="font-size:0.95rem;color:rgba(255,255,255,0.8)">• 只有 <code>plugin.json</code> 必须放在 <code>.claude-plugin/</code> 子目录内</div>
+            <div style="font-size:0.95rem;color:rgba(255,255,255,0.8)">• 其他组件直接位于根目录</div>
+          </div>
+          <div class="card card-green anim-right d4">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+              <span style="font-size:1.3rem">✅</span>
+              <span style="font-family:'Orbitron',sans-serif;color:var(--green);font-weight:600">设计巧思</span>
+            </div>
+            <div style="font-size:0.95rem;color:rgba(255,255,255,0.8)">Plugin 根目录本身就是</div>
+            <div style="font-size:0.95rem;color:rgba(255,255,255,0.8)">一个<strong style="color:var(--green)">合法的 Claude Code 项目</strong></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 9: plugin.json · Plugin 的身份证 ==================== -->
+  <div class="slide" data-idx="9">
+    <div class="content">
+      <div class="slide-title anim-up d1"><code>plugin.json</code> · Plugin 的身份证</div>
+      <div class="dual-col" style="width:100%;margin-top:20px">
+        <div class="card anim-left d2" style="text-align:left">
+          <div style="font-family:'Orbitron',sans-serif;color:var(--gold);font-weight:600;margin-bottom:12px">📋 plugin.json</div>
+          <div class="json-block" style="font-size:0.85rem">{
+  <span class="key">"name"</span>: <span class="str">"react-workflow"</span>,
+  <span class="key">"version"</span>: <span class="str">"1.2.0"</span>,
+  <span class="key">"description"</span>: <span class="str">"Complete React workflow"</span>,
+  <span class="key">"author"</span>: <span class="str">"YourName"</span>,
+  <span class="key">"repository"</span>: <span class="str">"github.com/yourname/..."</span>,
+  <span class="key">"license"</span>: <span class="str">"MIT"</span>,
+  <span class="key">"keywords"</span>: [<span class="str">"react"</span>, <span class="str">"workflow"</span>]
+}</div>
+          <div style="font-size:0.85rem;color:var(--text-dim);margin-top:10px;font-style:italic">结构与 <code>package.json</code> 高度相似</div>
+        </div>
+        <div class="card anim-right d3" style="text-align:left">
+          <div style="font-family:'Orbitron',sans-serif;color:var(--gold);font-weight:600;margin-bottom:12px">📋 字段规范</div>
+          <table class="styled-table" style="font-size:0.9rem">
+            <thead><tr><th>字段</th><th>约束</th><th>说明</th></tr></thead>
+            <tbody>
+              <tr><td><code>name</code></td><td><span class="pill pill-gold" style="margin:0;font-size:0.75rem">✅ 必需</span></td><td>唯一标识符</td></tr>
+              <tr><td><code>version</code></td><td><span class="pill pill-gold" style="margin:0;font-size:0.75rem">✅ 必需</span></td><td>语义化版本号</td></tr>
+              <tr><td><code>description</code></td><td><span class="pill pill-gold" style="margin:0;font-size:0.75rem">✅ 必需</span></td><td>一句话简介</td></tr>
+              <tr><td><code>author</code></td><td><span class="pill" style="margin:0;font-size:0.75rem;background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.6)">⚪ 可选</span></td><td>作者署名</td></tr>
+              <tr><td><code>repository</code></td><td><span class="pill" style="margin:0;font-size:0.75rem;background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.6)">⚪ 可选</span></td><td>仓库地址</td></tr>
+              <tr><td><code>license</code></td><td><span class="pill" style="margin:0;font-size:0.75rem;background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.6)">⚪ 可选</span></td><td>开源协议</td></tr>
+              <tr><td><code>keywords</code></td><td><span class="pill" style="margin:0;font-size:0.75rem;background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.6)">⚪ 可选</span></td><td>检索关键词</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 10: name · 决定命名空间 ==================== -->
+  <div class="slide" data-idx="10">
+    <div class="content">
+      <div class="pill pill-gold anim-in d1">[ 命名即命名空间 ]</div>
+      <div class="slide-title anim-up d2"><code>name</code> · 决定命名空间</div>
+      <div class="dual-col" style="width:100%;margin-top:20px">
+        <div class="card card-green anim-left d3" style="text-align:left">
+          <div style="font-family:'Orbitron',sans-serif;color:var(--green);font-weight:600;margin-bottom:12px">✅ 推荐命名</div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--green)"></div><div><code>react-workflow</code>｜一看就知道是 React 工作流</div></div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--green)"></div><div><code>pr-reviewer</code>｜直接表达 PR 审查能力</div></div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--green)"></div><div><code>db-tools</code>｜数据库工具集，简短不冲突</div></div>
+        </div>
+        <div class="card card-red anim-right d4" style="text-align:left">
+          <div style="font-family:'Orbitron',sans-serif;color:var(--red);font-weight:600;margin-bottom:12px">❌ 避免命名</div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--red)"></div><div><code>my-plugin</code>｜过于宽泛，没有信息量</div></div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--red)"></div><div><code>tools</code>｜极易与他人重名冲突</div></div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--red)"></div><div><code>v2</code>｜无意义，看不出做什么</div></div>
+        </div>
+      </div>
+      <div class="gold-banner anim-in d5" style="margin-top:15px">
+        <span style="font-size:1rem;color:var(--gold);font-weight:600">🔑 安装后变成 <code>plugin-name:component-name</code>，名字就是命名空间</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 11: 组件格式 · 上｜命令 + 子智能体 ==================== -->
+  <div class="slide" data-idx="11">
+    <div class="content">
+      <div class="pill pill-gold anim-in d1">[ 组件格式 · 上 ]</div>
+      <div class="slide-title anim-up d2">组件① 命令 + ② 子智能体</div>
+      <div class="dual-col" style="width:100%;margin-top:20px">
+        <div class="card card-cyan anim-left d3" style="text-align:left">
+          <div style="font-family:'Orbitron',sans-serif;color:var(--cyan);font-weight:600;margin-bottom:12px">📁 <code>commands/review.md</code></div>
+          <div class="code-block" style="font-size:0.85rem"><span class="cmt">---</span>
+<span class="var">name</span>: <span class="str">review</span>
+<span class="var">description</span>: <span class="str">对当前文件进行代码审查</span>
+<span class="cmt">---</span>
+请执行代码审查流程，分类输出：
+• 严重 / 警告 / 建议</div>
+          <div style="display:flex;gap:10px;margin-top:12px">
+            <span class="pill pill-cyan" style="margin:0;font-size:0.8rem">文件名即命令名</span>
+            <span class="pill pill-gold" style="margin:0;font-size:0.8rem">FrontMatter 元信息</span>
+          </div>
+        </div>
+        <div class="card card-purple anim-right d4" style="text-align:left">
+          <div style="font-family:'Orbitron',sans-serif;color:var(--purple);font-weight:600;margin-bottom:12px">🤖 <code>agents/security-scanner.md</code></div>
+          <div class="code-block" style="font-size:0.85rem"><span class="cmt">---</span>
+<span class="var">name</span>: <span class="str">security-scanner</span>
+<span class="var">description</span>: <span class="str">扫描代码安全漏洞</span>
+<span class="var">tools</span>: <span class="str">Read, Grep, Glob</span>
+<span class="var">model</span>: <span class="str">sonnet</span>
+<span class="cmt">---</span>
+你是资深安全专家...</div>
+          <div style="display:flex;gap:10px;margin-top:12px">
+            <span class="pill pill-purple" style="margin:0;font-size:0.8rem">tools 精确控权</span>
+            <span class="pill" style="margin:0;font-size:0.8rem;background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.6)">model 锁定模型</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 12: 组件格式 · 下｜Hooks + MCP ==================== -->
+  <div class="slide" data-idx="12">
+    <div class="content">
+      <div class="pill pill-gold anim-in d1">[ 组件格式 · 下 ]</div>
+      <div class="slide-title anim-up d2">组件③ Hooks + ④ MCP</div>
+      <div class="dual-col" style="width:100%;margin-top:20px">
+        <div class="card card-red anim-left d3" style="text-align:left">
+          <div style="font-family:'Orbitron',sans-serif;color:var(--red);font-weight:600;margin-bottom:12px">🔩 <code>hooks/hooks.json</code></div>
+          <div class="json-block" style="font-size:0.82rem">{
+  <span class="key">"hooks"</span>: [
+    {
+      <span class="key">"event"</span>: <span class="str">"PreToolUse"</span>,
+      <span class="key">"matcher"</span>: <span class="str">"Bash"</span>,
+      <span class="key">"command"</span>: [<span class="str">"bash"</span>, <span class="str">"./hooks/check-bash.sh"</span>]
+    }
+  ]
+}</div>
+          <div style="font-size:0.9rem;color:rgba(255,255,255,0.6);margin-top:10px">• 事件驱动｜匹配器｜执行命令</div>
+        </div>
+        <div class="card card-green anim-right d4" style="text-align:left">
+          <div style="font-family:'Orbitron',sans-serif;color:var(--green);font-weight:600;margin-bottom:12px">🔌 <code>.mcp.json</code></div>
+          <div class="json-block" style="font-size:0.82rem">{
+  <span class="key">"mcpServers"</span>: {
+    <span class="key">"postgres"</span>: {
+      <span class="key">"command"</span>: <span class="str">"npx"</span>,
+      <span class="key">"env"</span>: {
+        <span class="key">"DATABASE_URL"</span>: <span class="str">"${DATABASE_URL}"</span>
+      }
+    }
+  }
+}</div>
+          <div style="font-size:0.9rem;color:rgba(255,255,255,0.6);margin-top:10px">• 服务注册｜环境变量注入</div>
+        </div>
+      </div>
+      <div class="gold-banner anim-in d5" style="margin-top:15px">
+        <span style="font-size:1rem;color:var(--gold)">💡 <strong>零学习成本</strong>：之前怎么写，现在就怎么写</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 13: 安装三路径 ==================== -->
+  <div class="slide" data-idx="13">
+    <div class="content">
+      <div class="pill pill-gold anim-in d1">[ 安装三路径 ]</div>
+      <div class="slide-title anim-up d2">三种来源 · 全自动注册</div>
+      <div class="grid-3" style="width:100%;margin-top:20px">
+        <div class="card card-cyan anim-left d3" style="text-align:left">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+            <span style="font-size:1.5rem">🌐</span>
+            <span style="font-family:'Orbitron',sans-serif;color:var(--cyan);font-weight:600">社区市场</span>
+          </div>
+          <div class="shell-block" style="font-size:0.82rem"><span class="prompt">$</span> <span class="cmd">/plugin install</span> <span class="arg">react-workflow@community</span></div>
+          <div style="font-size:0.85rem;color:rgba(255,255,255,0.6);margin-top:10px">一键拉取 · 自动校验来源</div>
+        </div>
+        <div class="card card-purple anim-up d4" style="text-align:left">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+            <span style="font-size:1.5rem">🐙</span>
+            <span style="font-family:'Orbitron',sans-serif;color:var(--purple);font-weight:600">GitHub 仓库</span>
+          </div>
+          <div class="shell-block" style="font-size:0.82rem"><span class="prompt">$</span> <span class="cmd">/plugin install</span> <span class="arg">github.com/user/react-workflow</span></div>
+          <div style="font-size:0.85rem;color:rgba(255,255,255,0.6);margin-top:10px">直连任意公开仓</div>
+        </div>
+        <div class="card card-gold anim-right d5" style="text-align:left">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+            <span style="font-size:1.5rem">📁</span>
+            <span style="font-family:'Orbitron',sans-serif;color:var(--gold);font-weight:600">本地目录</span>
+          </div>
+          <div class="shell-block" style="font-size:0.82rem"><span class="prompt">$</span> <span class="cmd">/plugin install</span> <span class="arg">./path/to/my-plugin</span></div>
+          <div style="font-size:0.85rem;color:rgba(255,255,255,0.6);margin-top:10px">本机路径 · 边写边试</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:20px" class="anim-in d6">
+        <span class="pill pill-gold" style="margin:0">读取 plugin.json</span>
+        <span style="color:var(--gold)">→</span>
+        <span class="pill pill-cyan" style="margin:0">注册 Commands / Agents</span>
+        <span style="color:var(--gold)">→</span>
+        <span class="pill pill-green" style="margin:0">合并 Hooks 链</span>
+        <span style="color:var(--gold)">→</span>
+        <span class="pill pill-purple" style="margin:0">添加 MCP 服务器</span>
+      </div>
+      <div style="font-size:1rem;color:var(--green);font-weight:600;margin-top:10px" class="anim-in d7">✅ 所有操作完全可逆</div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 14: 日常管理与开发调试 ==================== -->
+  <div class="slide" data-idx="14">
+    <div class="content">
+      <div class="pill pill-gold anim-in d1">[ 日常管理与开发 ]</div>
+      <div class="slide-title anim-up d2">日常管理 · 开发调试</div>
+      <div class="grid-3" style="width:100%;margin-top:20px">
+        <div class="card card-cyan anim-left d3" style="text-align:left">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:15px">
+            <span style="font-size:1.3rem">🔧</span>
+            <span style="font-family:'Orbitron',sans-serif;color:var(--cyan);font-weight:600">日常命令</span>
+          </div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--cyan)"></div><div><code style="color:var(--green)">/plugin list</code>｜查看已安装插件</div></div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--cyan)"></div><div><code style="color:var(--green)">/plugin remove &lt;name&gt;</code>｜卸载并清理注册</div></div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--cyan)"></div><div><code style="color:var(--green)">/plugin update</code>｜升级到最新版本</div></div>
+        </div>
+        <div class="card card-gold anim-up d4" style="text-align:left;border-width:2px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:15px">
+            <span style="font-size:1.3rem">💻</span>
+            <span style="font-family:'Orbitron',sans-serif;color:var(--gold);font-weight:600">本地开发</span>
+            <span class="pill pill-gold" style="margin:0;font-size:0.7rem">推荐</span>
+          </div>
+          <div class="shell-block" style="font-size:0.85rem"><span class="prompt">$</span> <span class="cmd">claude</span> <span class="flag">--plugin-dir</span> <span class="arg">./my-plugin-dev</span></div>
+          <div style="font-size:0.85rem;color:rgba(255,255,255,0.6);margin-top:10px">跳过安装 · 改完代码立即重启</div>
+        </div>
+        <div class="card card-purple anim-right d5" style="text-align:left">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:15px">
+            <span style="font-size:1.3rem">📁</span>
+            <span style="font-family:'Orbitron',sans-serif;color:var(--purple);font-weight:600">存储路径</span>
+          </div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--purple)"></div><div>默认路径：<code>~/.claude/plugins/</code></div></div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--purple)"></div><div>环境变量覆盖：<code>CLAUDE_PLUGIN_ROOT</code></div></div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--purple)"></div><div>企业可指向共享存储</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 15: 命名空间 · 多 Plugin 共存 ==================== -->
+  <div class="slide" data-idx="15">
+    <div class="content">
+      <div class="slide-title anim-up d1">命名空间 · 多 Plugin 共存</div>
+      <div class="slide-sub anim-in d2">自动隔离 · 零冲突 · 全限定名</div>
+      <div style="display:flex;flex-direction:column;gap:16px;width:100%;margin-top:20px">
+        <div class="card anim-left d3" style="text-align:left">
+          <div style="display:flex;align-items:center;gap:12px">
+            <span class="file-path" style="margin:0"><code>/review</code></span>
+            <span style="color:var(--gold);font-size:1.2rem">→</span>
+            <span class="pill pill-gold" style="margin:0">auto namespace</span>
+            <span style="color:var(--gold);font-size:1.2rem">→</span>
+            <span class="file-path" style="margin:0;color:var(--gold)"><code>/react-workflow:review</code></span>
+          </div>
+        </div>
+        <div class="card anim-left d4" style="text-align:left">
+          <div style="display:flex;align-items:center;gap:12px">
+            <span class="file-path" style="margin:0"><code>code-reviewer</code> Skill</span>
+            <span style="color:var(--gold);font-size:1.2rem">→</span>
+            <span class="pill pill-gold" style="margin:0">auto namespace</span>
+            <span style="color:var(--gold);font-size:1.2rem">→</span>
+            <span class="file-path" style="margin:0;color:var(--gold)"><code>/react-workflow:code-reviewer</code></span>
+          </div>
+        </div>
+        <div class="card anim-left d5" style="text-align:left">
+          <div style="display:flex;align-items:center;gap:12px">
+            <span class="file-path" style="margin:0"><code>security-scanner</code> Agent</span>
+            <span style="color:var(--gold);font-size:1.2rem">→</span>
+            <span class="pill pill-gold" style="margin:0">auto namespace</span>
+            <span style="color:var(--gold);font-size:1.2rem">→</span>
+            <span class="file-path" style="margin:0;color:var(--gold)"><code>/react-workflow:security-scanner</code></span>
+          </div>
+        </div>
+      </div>
+      <div class="dual-col" style="width:100%;margin-top:20px">
+        <div class="card card-green anim-up d6" style="text-align:center">
+          <div style="font-size:1.5rem;margin-bottom:8px">✅</div>
+          <div style="font-family:'Orbitron',sans-serif;color:var(--green);font-weight:600;margin-bottom:8px">消除协作顾虑</div>
+          <div style="font-size:0.9rem;color:rgba(255,255,255,0.7)">团队放心组合多个 Plugin，不再担心同名覆盖</div>
+        </div>
+        <div class="card card-cyan anim-up d7" style="text-align:center">
+          <div style="font-size:1.5rem;margin-bottom:8px">📉</div>
+          <div style="font-family:'Orbitron',sans-serif;color:var(--cyan);font-weight:600;margin-bottom:8px">降低维护成本</div>
+          <div style="font-size:0.9rem;color:rgba(255,255,255,0.7)">开发者不必刻意避免命名，专注业务逻辑本身</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 16: 实战 · team-toolkit ==================== -->
+  <div class="slide" data-idx="16">
+    <div class="content">
+      <div class="pill pill-gold anim-in d1">[ 实战 ]</div>
+      <div class="slide-title anim-up d2">实战 · <code style="color:var(--gold)">team-toolkit</code> 团队能力包</div>
+      <div class="dual-col" style="width:100%;margin-top:20px">
+        <div class="card anim-left d2" style="text-align:left">
+          <div style="font-family:'Orbitron',sans-serif;color:var(--gold);font-weight:600;margin-bottom:12px">📁 项目结构</div>
+          <div class="dir-tree"><span class="dir">team-toolkit/</span>
+├── <span class="hl">.claude-plugin/plugin.json</span>
+├── <span class="dir">commands/</span>
+│   ├── <span class="file">review.md</span>
+│   └── <span class="file">test.md</span>
+├── <span class="dir">agents/</span>
+│   ├── <span class="file">security-scanner.md</span>
+│   └── <span class="file">quick-fix.md</span>
+├── <span class="dir">skills/</span>
+│   └── <span class="file">react-patterns/SKILL.md</span>
+├── <span class="dir">hooks/</span>
+│   ├── <span class="hl" style="color:var(--red)">hooks.json</span>
+│   ├── <span class="file">check-bash.sh</span>
+│   └── <span class="file">auto-format.sh</span>
+├── <span class="hl" style="color:var(--purple)">.mcp.json</span>
+└── <span class="file">README.md</span></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div class="card card-cyan anim-right d3">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:1.2rem">🔹</span>
+              <div>
+                <div style="font-family:'Orbitron',sans-serif;color:var(--cyan);font-weight:600">Commands</div>
+                <div style="font-size:0.9rem;color:rgba(255,255,255,0.7)"><code>review</code> / <code>test</code></div>
+              </div>
+            </div>
+          </div>
+          <div class="card card-green anim-right d4">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:1.2rem">🤖</span>
+              <div>
+                <div style="font-family:'Orbitron',sans-serif;color:var(--green);font-weight:600">Agents</div>
+                <div style="font-size:0.9rem;color:rgba(255,255,255,0.7)"><code>security-scanner</code> / <code>quick-fix</code></div>
+              </div>
+            </div>
+          </div>
+          <div class="card card-gold anim-right d5">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:1.2rem">📘</span>
+              <div>
+                <div style="font-family:'Orbitron',sans-serif;color:var(--gold);font-weight:600">Skills</div>
+                <div style="font-size:0.9rem;color:rgba(255,255,255,0.7)"><code>react-patterns</code></div>
+              </div>
+            </div>
+          </div>
+          <div class="card card-red anim-right d6">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:1.2rem">⚡</span>
+              <div>
+                <div style="font-family:'Orbitron',sans-serif;color:var(--red);font-weight:600">Hooks</div>
+                <div style="font-size:0.9rem;color:rgba(255,255,255,0.7)"><code>check-bash</code> / <code>auto-format</code></div>
+              </div>
+            </div>
+          </div>
+          <div class="card card-purple anim-right d7">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:1.2rem">🔌</span>
+              <div>
+                <div style="font-family:'Orbitron',sans-serif;color:var(--purple);font-weight:600">MCP</div>
+                <div style="font-size:0.9rem;color:rgba(255,255,255,0.7)"><code>.mcp.json</code> 外部服务</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 17: 发布 · 一行命令分发 ==================== -->
+  <div class="slide" data-idx="17">
+    <div class="content">
+      <div class="slide-title anim-up d1">发布 · 一行命令分发</div>
+      <div style="font-size:1.1rem;color:rgba(255,255,255,0.5);margin-bottom:20px" class="anim-in d2">发布的本质 · 就是一次 git push</div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;margin:10px 0" class="anim-up d3">
+        <div class="card" style="padding:14px 20px;text-align:center;border-color:rgba(0,243,255,0.3);min-width:160px">
+          <div style="font-family:'Orbitron',sans-serif;font-size:0.8rem;color:var(--cyan);margin-bottom:5px">STEP 1</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:0.85rem;color:#fff"><code>cd team-toolkit && git init</code></div>
+        </div>
+        <span style="color:var(--gold);font-size:1.2rem">→</span>
+        <div class="card" style="padding:14px 20px;text-align:center;border-color:rgba(0,243,255,0.3);min-width:160px">
+          <div style="font-family:'Orbitron',sans-serif;font-size:0.8rem;color:var(--cyan);margin-bottom:5px">STEP 2</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:0.85rem;color:#fff"><code>git add . && git commit -m "v2.0.0"</code></div>
+        </div>
+        <span style="color:var(--gold);font-size:1.2rem">→</span>
+        <div class="card" style="padding:14px 20px;text-align:center;border-color:rgba(255,215,0,0.3);min-width:120px">
+          <div style="font-family:'Orbitron',sans-serif;font-size:0.8rem;color:var(--gold);margin-bottom:5px">STEP 3</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:0.85rem;color:#fff"><code>git tag v2.0.0</code></div>
+        </div>
+        <span style="color:var(--gold);font-size:1.2rem">→</span>
+        <div class="card" style="padding:14px 20px;text-align:center;border-color:rgba(180,130,255,0.3);min-width:160px">
+          <div style="font-family:'Orbitron',sans-serif;font-size:0.8rem;color:var(--purple);margin-bottom:5px">STEP 4</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:0.85rem;color:#fff"><code>git remote add origin ...</code></div>
+        </div>
+        <span style="color:var(--gold);font-size:1.2rem">→</span>
+        <div class="card" style="padding:14px 20px;text-align:center;border-color:rgba(0,200,120,0.3);min-width:120px">
+          <div style="font-family:'Orbitron',sans-serif;font-size:0.8rem;color:var(--green);margin-bottom:5px">STEP 5</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:0.85rem;color:#fff"><code>git push --tags</code></div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:15px" class="anim-in d4">
+        <span style="color:var(--gold);font-size:1.2rem">💡</span>
+        <span style="font-size:1rem;color:rgba(255,255,255,0.6)">发布的本质 · 就是一次 <code>git push</code></span>
+      </div>
+      <div class="gold-banner anim-in d5" style="margin-top:15px">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:1rem;color:var(--gold);margin-bottom:5px"><code>/plugin install github.com/our-company/team-toolkit</code></div>
+        <div style="font-size:0.9rem;color:rgba(255,255,255,0.6)">团队成员一行命令，整套到位</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 18: 私有市场 · 企业治理 ==================== -->
+  <div class="slide" data-idx="18">
+    <div class="content">
+      <div class="slide-title anim-up d1">私有市场 · 企业治理</div>
+      <div class="dual-col" style="width:100%;margin-top:20px">
+        <div class="card anim-left d2" style="text-align:left">
+          <div style="font-family:'Orbitron',sans-serif;color:var(--gold);font-weight:600;margin-bottom:12px">📁 <code>marketplace.json</code></div>
+          <div class="json-block" style="font-size:0.85rem">{
+  <span class="key">"name"</span>: <span class="str">"Our Company Plugins"</span>,
+  <span class="key">"description"</span>: <span class="str">"内部插件市场"</span>,
+  <span class="key">"plugins"</span>: [
+    { <span class="key">"name"</span>: <span class="str">"team-toolkit"</span>, <span class="key">"version"</span>: <span class="str">"2.0.0"</span> },
+    { <span class="key">"name"</span>: <span class="str">"db-tools"</span>, <span class="key">"version"</span>: <span class="str">"1.2.0"</span> }
+  ]
+}</div>
+          <div class="shell-block" style="font-size:0.85rem;margin-top:12px"><span class="prompt">$</span> <span class="cmd">/plugin marketplace add</span> <span class="arg">our-company/claude-plugins</span></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div class="card card-cyan anim-right d3">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+              <span style="font-size:1.3rem">🔐</span>
+              <span style="font-family:'Orbitron',sans-serif;color:var(--cyan);font-weight:600">统一分发</span>
+            </div>
+            <div style="font-size:0.95rem;color:rgba(255,255,255,0.7)">管理员后台配置，自动推送至所有成员</div>
+          </div>
+          <div class="card card-gold anim-right d4">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+              <span style="font-size:1.3rem">📦</span>
+              <span style="font-family:'Orbitron',sans-serif;color:var(--gold);font-weight:600">版本管控</span>
+            </div>
+            <div style="font-size:0.95rem;color:rgba(255,255,255,0.7)">锁定特定版本，更新权限归管理员</div>
+          </div>
+          <div class="card card-green anim-right d5">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+              <span style="font-size:1.3rem">🔍</span>
+              <span style="font-family:'Orbitron',sans-serif;color:var(--green);font-weight:600">审计可见</span>
+            </div>
+            <div style="font-size:0.95rem;color:rgba(255,255,255,0.7)">完整追踪安装与使用，满足企业合规要求</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 19: 设计原则① 单一职责 ==================== -->
+  <div class="slide" data-idx="19">
+    <div class="content">
+      <div class="pill pill-gold anim-in d1">DESIGN PRINCIPLE 01</div>
+      <div class="slide-title anim-up d2">设计原则① 单一职责</div>
+      <div class="dual-col" style="width:100%;margin-top:20px">
+        <div class="card card-green anim-left d3" style="text-align:left">
+          <div style="font-family:'Orbitron',sans-serif;color:var(--green);font-weight:600;margin-bottom:12px">✅ 推荐</div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--green)"></div><div><code style="color:var(--green)">react-workflow</code>｜专注 React 开发流程</div></div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--green)"></div><div><code style="color:var(--green)">security-scanner</code>｜专做安全扫描</div></div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--green)"></div><div><code style="color:var(--green)">db-tools</code>｜数据库辅助</div></div>
+        </div>
+        <div class="card card-red anim-right d4" style="text-align:left">
+          <div style="font-family:'Orbitron',sans-serif;color:var(--red);font-weight:600;margin-bottom:12px">❌ 反面</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:1.1rem;color:var(--red);margin-bottom:10px"><code>everything-plugin</code></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+            <span class="pill pill-red" style="margin:0;font-size:0.8rem">包罗万象</span>
+            <span class="pill pill-red" style="margin:0;font-size:0.8rem">缺乏深度</span>
+            <span class="pill pill-red" style="margin:0;font-size:0.8rem">定位模糊</span>
+            <span class="pill pill-red" style="margin:0;font-size:0.8rem">难以维护</span>
+          </div>
+          <div style="font-size:0.9rem;color:rgba(255,255,255,0.5);font-style:italic;padding-left:12px;border-left:3px solid var(--red)">"包罗万象 → 用户也不知道它擅长什么"</div>
+        </div>
+      </div>
+      <div class="gold-banner anim-in d5" style="margin-top:15px">
+        <span style="font-size:1.1rem;color:var(--gold);font-weight:700">🔑 专注 = 价值</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 20: 设计原则② 渐进式迭代 ==================== -->
+  <div class="slide" data-idx="20">
+    <div class="content">
+      <div class="pill pill-gold anim-in d1">设计原则 ②</div>
+      <div class="slide-title anim-up d2">渐进式迭代 · MVP 优先</div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;margin:20px 0" class="anim-up d3">
+        <div class="card" style="padding:14px 20px;text-align:center;border-color:rgba(255,215,0,0.3)">
+          <div style="font-family:'Orbitron',sans-serif;font-size:0.8rem;color:var(--gold);margin-bottom:5px">v1.0.0</div>
+          <div style="font-size:0.9rem;color:#fff">核心命令 <code>/review</code></div>
+        </div>
+        <span style="color:var(--gold);font-size:1.2rem">→</span>
+        <div class="card" style="padding:14px 20px;text-align:center;border-color:rgba(0,243,255,0.3)">
+          <div style="font-family:'Orbitron',sans-serif;font-size:0.8rem;color:var(--cyan);margin-bottom:5px">v1.1.0</div>
+          <div style="font-size:0.9rem;color:#fff">子智能体 <code>security-scanner</code></div>
+        </div>
+        <span style="color:var(--gold);font-size:1.2rem">→</span>
+        <div class="card" style="padding:14px 20px;text-align:center;border-color:rgba(180,130,255,0.3)">
+          <div style="font-family:'Orbitron',sans-serif;font-size:0.8rem;color:var(--purple);margin-bottom:5px">v1.2.0</div>
+          <div style="font-size:0.9rem;color:#fff">增强 Skill <code>react-patterns</code></div>
+        </div>
+        <span style="color:var(--gold);font-size:1.2rem">→</span>
+        <div class="card" style="padding:14px 20px;text-align:center;border-color:rgba(0,200,120,0.3)">
+          <div style="font-family:'Orbitron',sans-serif;font-size:0.8rem;color:var(--green);margin-bottom:5px">v2.0.0</div>
+          <div style="font-size:0.9rem;color:#fff">完整自动化 <code>MCP + Hooks</code></div>
+        </div>
+      </div>
+      <div class="dual-col" style="width:100%">
+        <div class="card card-green anim-left d4" style="text-align:left">
+          <div style="font-family:'Orbitron',sans-serif;color:var(--green);font-weight:600;margin-bottom:10px">✅ 推荐</div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--green)"></div><div>1 条命令 · 立即可用</div></div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--green)"></div><div>用户反馈驱动迭代</div></div>
+        </div>
+        <div class="card card-red anim-right d5" style="text-align:left">
+          <div style="font-family:'Orbitron',sans-serif;color:var(--red);font-weight:600;margin-bottom:10px">❌ 反面</div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--red)"></div><div>10 个半成品 · 难以维护</div></div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--red)"></div><div>用户困惑</div></div>
+        </div>
+      </div>
+      <div class="gold-banner anim-in d6" style="margin-top:15px">
+        <span style="font-size:1.1rem;color:var(--gold);font-weight:700">🚀 尽早发布 · 反馈驱动</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 21: 设计原则③④ ==================== -->
+  <div class="slide" data-idx="21">
+    <div class="content">
+      <div class="pill pill-gold anim-in d1">设计原则 ③ · ④</div>
+      <div class="slide-title anim-up d2">最小权限 · 文档必需</div>
+      <div class="dual-col" style="width:100%;margin-top:20px">
+        <div class="card card-green anim-left d3" style="text-align:left">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:15px">
+            <span style="font-size:1.3rem">🛡️</span>
+            <span style="font-family:'Orbitron',sans-serif;color:var(--green);font-weight:600;font-size:1.1rem">最小权限</span>
+          </div>
+          <div class="card" style="background:rgba(0,200,120,0.1);border-color:rgba(0,200,120,0.3);padding:14px 18px;margin-bottom:10px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="color:var(--green)">✅</span>
+              <span style="font-weight:600;color:var(--green)">推荐</span>
+              <span style="color:rgba(255,255,255,0.7)">｜只读三件套</span>
+            </div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:0.9rem;color:#fff;margin-top:5px"><code>Read, Grep, Glob</code></div>
+          </div>
+          <div class="card" style="background:rgba(255,77,77,0.1);border-color:rgba(255,77,77,0.3);padding:14px 18px;margin-bottom:10px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="color:var(--red)">❌</span>
+              <span style="font-weight:600;color:var(--red)">禁止</span>
+              <span style="color:rgba(255,255,255,0.7)">｜过权·高风险</span>
+            </div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:0.9rem;color:#fff;margin-top:5px"><code>Write, Bash</code></div>
+          </div>
+          <div style="text-align:center;font-size:1rem;color:var(--gold);font-weight:600;margin-top:10px">🔑 权限越大 · 信任越贵</div>
+        </div>
+        <div class="card card-gold anim-right d4" style="text-align:left">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:15px">
+            <span style="font-size:1.3rem">📄</span>
+            <span style="font-family:'Orbitron',sans-serif;color:var(--gold);font-weight:600;font-size:1.1rem">文档是必需品</span>
+          </div>
+          <div style="font-size:0.95rem;color:rgba(255,255,255,0.7);margin-bottom:12px"><code>README.md</code> 必须包含：</div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--green)"></div><div>一行安装命令（可复制）</div></div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--green)"></div><div>完整功能清单（Commands / Agents / Skills）</div></div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--green)"></div><div>配置指南（环境变量、MCP）</div></div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--green)"></div><div>清晰的更新日志</div></div>
+          <div style="text-align:center;font-size:1rem;color:var(--red);font-weight:600;margin-top:10px">💥 没有文档 = 没有价值</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 22: 何时打包为 Plugin ==================== -->
+  <div class="slide" data-idx="22">
+    <div class="content">
+      <div class="slide-title anim-up d1">何时打包为 Plugin</div>
+      <div class="slide-sub anim-in d2">决策依据 · 目标受众范围</div>
+      <table class="styled-table anim-up d3" style="width:100%;margin-top:20px">
+        <thead>
+          <tr>
+            <th style="width:25%">受众范围</th>
+            <th style="width:35%">推荐方式</th>
+            <th style="width:40%">核心优势</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="font-weight:600;color:var(--cyan)">单个项目</td>
+            <td><code>.claude/</code> 项目级</td>
+            <td>配置与代码同源</td>
+          </tr>
+          <tr>
+            <td style="font-weight:600;color:var(--purple)">个人跨项目</td>
+            <td><code>~/.claude/</code> 用户级</td>
+            <td>适配个人偏好</td>
+          </tr>
+          <tr>
+            <td style="font-weight:600;color:var(--gold)">跨团队/组织</td>
+            <td>公开 / 私有 Plugin</td>
+            <td>一键安装 · 跨项目复用</td>
+          </tr>
+          <tr>
+            <td style="font-weight:600;color:var(--green)">企业统一推行</td>
+            <td>组织级 Plugin</td>
+            <td>管理员统一管控</td>
+          </tr>
+        </tbody>
+      </table>
+      <div style="display:flex;gap:20px;margin-top:15px" class="anim-in d4">
+        <span class="pill pill-gold" style="margin:0">🏷️ 高价值</span>
+        <span class="pill pill-green" style="margin:0">🏷️ 最高价值</span>
+      </div>
+      <div class="gold-banner anim-in d5" style="margin-top:15px">
+        <span style="font-size:1.1rem;color:var(--gold);font-weight:700">🔑 范围越大 · 价值越大</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 23: 大佬发言 · 未来演进 ==================== -->
+  <div class="slide" data-idx="23">
+    <div class="content">
+      <div class="slide-title anim-up d1">大佬发言 · 未来演进</div>
+      <div class="dual-col" style="width:100%;margin-top:20px">
+        <div class="card card-gold anim-left d2" style="text-align:left">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:15px">
+            <span style="font-size:1.5rem">👤</span>
+            <span style="font-family:'Orbitron',sans-serif;color:var(--gold);font-weight:600">大佬发言｜关于 Plugin 的价值</span>
+          </div>
+          <div style="font-size:1rem;color:rgba(255,255,255,0.5);font-style:italic;margin-bottom:15px;padding-left:12px;border-left:3px solid var(--gold)">"Plugin 的价值 ="</div>
+          <div style="text-align:center;margin:15px 0">
+            <span style="font-size:1.5rem;color:var(--gold);font-weight:700">效用</span>
+            <span style="font-size:1.5rem;color:var(--purple);font-weight:700"> × </span>
+            <span style="font-size:1.5rem;color:var(--green);font-weight:700">用户规模</span>
+          </div>
+          <div style="text-align:center;font-size:1.1rem;color:rgba(255,255,255,0.7)">20 人团队 → 价值放大 <strong style="color:var(--gold)">20 倍</strong></div>
+        </div>
+        <div class="card card-purple anim-right d3" style="text-align:left">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:15px">
+            <span style="font-size:1.5rem">⚡</span>
+            <span style="font-family:'Orbitron',sans-serif;color:var(--purple);font-weight:600">LSP · 未来演进</span>
+          </div>
+          <div style="font-size:0.95rem;color:rgba(255,255,255,0.5);font-style:italic;margin-bottom:12px">指导 Claude → 让 Claude 实时感知</div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--purple)"></div><div><code>TypeScript 编译器</code> → 实时类型错误</div></div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--purple)"></div><div>直接注入 Claude 上下文</div></div>
+          <div style="text-align:center;margin-top:15px;font-size:1rem;color:var(--gold);font-weight:600">📈 从被动指导 → 主动感知</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 24: 本章小结 ==================== -->
+  <div class="slide" data-idx="24">
+    <div class="content">
+      <div class="pill pill-gold anim-in d1">[ 本章小结 ]</div>
+      <div class="slide-title anim-up d2">Plugins · 知识流通的最后一公里</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;width:100%;margin-top:20px">
+        <div class="card card-cyan anim-left d3">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+            <span style="font-size:1.5rem">📄</span>
+            <div>
+              <div style="font-family:'Orbitron',sans-serif;color:var(--cyan);font-weight:600;font-size:1rem">① 角色定位</div>
+              <div style="font-size:0.85rem;color:rgba(255,255,255,0.5)">最后一公里</div>
+            </div>
+          </div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:0.85rem;color:var(--cyan);margin-bottom:8px"><code>distribution · not creation</code></div>
+          <div style="font-size:0.95rem;color:rgba(255,255,255,0.7)">不造新能力，让既有能力优雅流通</div>
+        </div>
+        <div class="card card-gold anim-right d4">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+            <span style="font-size:1.5rem">⬡</span>
+            <div>
+              <div style="font-family:'Orbitron',sans-serif;color:var(--gold);font-weight:600;font-size:1rem">② 物理结构</div>
+              <div style="font-size:0.85rem;color:rgba(255,255,255,0.5)">仓库 + 清单</div>
+            </div>
+          </div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:0.85rem;color:var(--gold);margin-bottom:8px"><code>.claude-plugin/plugin.json</code></div>
+          <div style="font-size:0.95rem;color:rgba(255,255,255,0.7)">Git 仓库存 + 清单文件 = 根目录功能模块</div>
+        </div>
+        <div class="card card-green anim-left d5">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+            <span style="font-size:1.5rem">🌐</span>
+            <div>
+              <div style="font-family:'Orbitron',sans-serif;color:var(--green);font-weight:600;font-size:1rem">③ 三种来源</div>
+              <div style="font-size:0.85rem;color:rgba(255,255,255,0.5)">市场 / GitHub / 本地</div>
+            </div>
+          </div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:0.85rem;color:var(--green);margin-bottom:8px"><code>marketplace · git · file</code></div>
+          <div style="font-size:0.95rem;color:rgba(255,255,255,0.7)">社区市场 · GitHub · 本地目录</div>
+        </div>
+        <div class="card card-purple anim-right d6">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+            <span style="font-size:1.5rem">📈</span>
+            <div>
+              <div style="font-family:'Orbitron',sans-serif;color:var(--purple);font-weight:600;font-size:1rem">④ 真正价值</div>
+              <div style="font-size:0.85rem;color:rgba(255,255,255,0.5)">知识资产化</div>
+            </div>
+          </div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:0.85rem;color:var(--purple);margin-bottom:8px"><code>compound · effect</code></div>
+          <div style="font-size:0.95rem;color:rgba(255,255,255,0.7)">把知识转化为资产，产生复利效应</div>
+        </div>
+      </div>
+      <div class="gold-banner anim-in d7" style="margin-top:20px">
+        <span style="font-size:1.1rem;color:var(--gold);font-weight:700">🌟 知识 · 开始像代码一样流通</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 25: 下章预告 ==================== -->
+  <div class="slide" data-idx="25">
+    <div class="content">
+      <div class="pill pill-purple anim-in d1">[ 下章预告 ]</div>
+      <div class="slide-title anim-up d2">工程实战 · 收官篇</div>
+      <div class="card card-purple anim-scale d3" style="max-width:700px;text-align:center;padding:40px">
+        <div style="font-size:3rem;margin-bottom:15px">📚</div>
+        <div style="font-family:'Orbitron',sans-serif;font-size:1rem;color:var(--purple);font-weight:600;margin-bottom:8px">NEXT · CHAPTER 10</div>
+        <div style="font-family:'Orbitron',sans-serif;font-size:1.8rem;color:#fff;font-weight:700;margin-bottom:15px">工程实战 · 调试 · 成本 · 规模化</div>
+        <div style="font-size:1.05rem;color:rgba(255,255,255,0.7);margin-bottom:8px">• 复盘所有扩展机制如何协同</div>
+        <div style="font-size:1.05rem;color:rgba(255,255,255,0.7)">• 调试策略 · 成本管控 · 团队规模化落地方法论</div>
+        <div style="margin-top:20px">
+          <span style="color:var(--purple);font-size:1.5rem">→</span>
+          <span style="color:rgba(255,255,255,0.5);font-size:1rem;margin-left:10px">第10章：真正走向生产落地</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 26: 预留页 ==================== -->
+  <div class="slide" data-idx="26">
+    <div class="content">
+      <div class="pill pill-gold anim-in d1">CHAPTER · 09</div>
+      <div class="slide-title anim-up d2">预留内容页</div>
+      <div style="font-size:1.2rem;color:rgba(255,255,255,0.5);margin-top:20px" class="anim-in d3">后续内容将补充至此</div>
+      <div style="margin-top:40px" class="anim-scale d4">
+        <div style="width:120px;height:120px;border-radius:50%;border:2px dashed rgba(255,215,0,0.3);display:flex;align-items:center;justify-content:center;margin:0 auto">
+          <span style="font-size:3rem;color:rgba(255,215,0,0.3)">+</span>
+        </div>
+      </div>
+      <div style="font-size:0.9rem;color:rgba(255,255,255,0.3);margin-top:20px" class="anim-in d5">Plugins Ecosystem & Distribution</div>
+    </div>
+  </div>
+
+</div><!-- /deck -->
+
+<!-- NAV -->
+<div class="nav" id="nav">
+  <button id="prevBtn" title="上一页">‹</button>
+  <div class="dots" id="dots"></div>
+  <div class="page-info" id="pageInfo">1 / 26</div>
+  <button id="nextBtn" title="下一页">›</button>
+</div>
+
+<script>
+// ========== SNOWFLAKE GENERATOR ==========
+(function createSnow() {
+  var field = document.getElementById('snowfield');
+  var count = 45;
+  for (var i = 0; i < count; i++) {
+    var flake = document.createElement('div');
+    flake.className = 'snowflake';
+    var size = 1.5 + Math.random() * 4;
+    var left = Math.random() * 100;
+    var dur = 10 + Math.random() * 18;
+    var sway = 3 + Math.random() * 6;
+    var delay = Math.random() * dur;
+    var opacity = 0.15 + Math.random() * 0.5;
+    flake.style.cssText =
+      'width:' + size + 'px;height:' + size + 'px;' +
+      'left:' + left + '%;' +
+      'opacity:' + opacity + ';' +
+      'animation-duration:' + dur + 's,' + sway + 's;' +
+      'animation-delay:' + delay + 's,' + (delay * 0.4) + 's;';
+    field.appendChild(flake);
+  }
+})();
+
+// ========== DECK ENGINE ==========
+const slides = Array.from(document.querySelectorAll('.slide'));
+const totalSlides = slides.length;
+let current = 0;
+
+const dotsContainer = document.getElementById('dots');
+const pageInfo = document.getElementById('pageInfo');
+const prevBtn = document.getElementById('prevBtn');
+const nextBtn = document.getElementById('nextBtn');
+
+// Create dots
+slides.forEach((_, i) => {
+  const dot = document.createElement('div');
+  dot.className = 'dot' + (i === 0 ? ' active' : '');
+  dot.addEventListener('click', () => goTo(i));
+  dotsContainer.appendChild(dot);
+});
+
+function goTo(idx) {
+  if (idx < 0 || idx >= totalSlides) return;
+  slides[current].classList.remove('active');
+  current = idx;
+  slides[current].classList.add('active');
+  // Reset animations
+  slides[current].querySelectorAll('[class*="anim-"]').forEach(el => {
+    el.style.animation = 'none';
+    el.offsetHeight;
+    el.style.animation = '';
+  });
+  updateNav();
+  savePos();
+}
+
+function updateNav() {
+  const slideNum = current + 1;
+  pageInfo.textContent = slideNum + ' / ' + totalSlides;
+  dotsContainer.querySelectorAll('.dot').forEach((d, i) => {
+    d.classList.toggle('active', i === current);
+  });
+}
+
+prevBtn.addEventListener('click', () => goTo(current - 1));
+nextBtn.addEventListener('click', () => goTo(current + 1));
+
+// Keyboard nav
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') {
+    e.preventDefault();
+    goTo(current + 1);
+  }
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    goTo(current - 1);
+  }
+  if (e.key === 'Home') { e.preventDefault(); goTo(0); }
+  if (e.key === 'End')  { e.preventDefault(); goTo(totalSlides - 1); }
+});
+
+// Persist position
+function savePos() {
+  try { localStorage.setItem('ch9-slide', current); } catch(e) {}
+}
+function loadPos() {
+  try {
+    const saved = parseInt(localStorage.getItem('ch9-slide'), 10);
+    if (!isNaN(saved) && saved >= 0 && saved < totalSlides) {
+      goTo(saved);
+      return true;
+    }
+  } catch(e) {}
+  return false;
+}
+
+// Responsive scale
+function rescale() {
+  const deck = document.getElementById('deck');
+  const padX = 40, padY = 120;
+  const scale = Math.min(
+    (window.innerWidth - padX) / 1920,
+    (window.innerHeight - padY) / 1080
+  );
+  deck.style.transform = 'scale(' + (scale * 1.15) + ')';
+}
+window.addEventListener('resize', rescale);
+rescale();
+
+// Init
+if (!loadPos()) goTo(0);
+</script>
+</body>
+</html>

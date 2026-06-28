@@ -1,0 +1,2235 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Claude Code Harness · 第6章 · MCP 模型上下文协议集成</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    /* ========== DESIGN SYSTEM (from 模板.html) ========== */
+    :root {
+      --gold: #FFD700;
+      --cyan: #00F3FF;
+      --magenta: #FF00C8;
+      --dark: #0A0A0A;
+      --dark-card: rgba(15, 15, 20, 0.85);
+      --grid: rgba(40, 40, 40, 0.4);
+      --text: #E8E8E8;
+      --text-dim: rgba(255, 255, 255, 0.55);
+      --gold-glow: rgba(255, 215, 0, 0.6);
+      --cyan-glow: rgba(0, 243, 255, 0.6);
+      --magenta-glow: rgba(255, 0, 200, 0.6);
+      --red: #FF4D4D;
+      --green: #00C878;
+      --purple: #B482FF;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--dark);
+      font-family: 'Inter', sans-serif;
+      color: white;
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    /* ========== GRID BACKGROUND ========== */
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+      background-size: 32px 32px;
+      z-index: 0;
+      animation: gridPulse 6s infinite alternate;
+    }
+    @keyframes gridPulse {
+      0% { opacity: 0.6; }
+      100% { opacity: 0.85; }
+    }
+
+    /* ========== SNOWFLAKE PARTICLES ========== */
+    .snowflake {
+      position: fixed;
+      border-radius: 50%;
+      background: white;
+      pointer-events: none;
+      z-index: 1;
+      animation: snowfall linear infinite, snowSway ease-in-out infinite;
+    }
+    @keyframes snowfall {
+      0%   { top: -8px; opacity: 0; }
+      5%   { opacity: 1; }
+      92%  { opacity: 0.8; }
+      100% { top: 105vh; opacity: 0; }
+    }
+    @keyframes snowSway {
+      0%, 100% { transform: translateX(0) rotate(0deg); }
+      25%      { transform: translateX(18px) rotate(90deg); }
+      50%      { transform: translateX(-12px) rotate(180deg); }
+      75%      { transform: translateX(22px) rotate(270deg); }
+    }
+
+    /* ========== DECK CONTAINER ========== */
+    .deck {
+      width: 1920px;
+      height: 1080px;
+      position: relative;
+      transform-origin: center center;
+      z-index: 10;
+    }
+
+    /* ========== SLIDE BASE ========== */
+    .slide {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 80px 120px 100px;
+      text-align: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.5s ease;
+    }
+    .slide.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .slide:not(.active) { display: none !important; }
+
+    /* ========== TYPOGRAPHY ========== */
+    .tag {
+      display: inline-block;
+      background: rgba(0,30,50,0.6);
+      border: 1px solid rgba(0,200,255,0.3);
+      border-radius: 20px;
+      padding: 8px 24px;
+      font-size: 1rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--cyan);
+      margin-bottom: 24px;
+    }
+
+    .slide-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 3.6rem;
+      font-weight: 700;
+      margin: 12px 0 8px;
+      line-height: 1.15;
+    }
+    .slide-title .gold   { color: var(--gold); text-shadow: 0 0 14px var(--gold-glow); }
+    .slide-title .cyan   { color: var(--cyan); text-shadow: 0 0 14px var(--cyan-glow); }
+    .slide-title .magenta{ color: var(--magenta); text-shadow: 0 0 14px var(--magenta-glow); }
+
+    .slide-subtitle {
+      font-size: 1.5rem;
+      font-weight: 400;
+      color: var(--text-dim);
+      letter-spacing: 1px;
+      margin-bottom: 12px;
+    }
+
+    .slide-subtitle-en {
+      font-size: 1.05rem;
+      color: var(--text-dim);
+      opacity: 0.6;
+      letter-spacing: 2px;
+      margin-bottom: 24px;
+    }
+
+    .divider {
+      width: 120px;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--gold), transparent);
+      margin: 20px auto 28px;
+    }
+
+    /* ========== NAV CONTROLS ========== */
+    .nav {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      z-index: 100;
+      background: rgba(10,10,10,0.8);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 40px;
+      padding: 10px 28px;
+      backdrop-filter: blur(10px);
+    }
+    .nav button {
+      background: none;
+      border: 1px solid rgba(255,255,255,0.2);
+      color: white;
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 1.1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+    .nav button:hover {
+      border-color: var(--cyan);
+      color: var(--cyan);
+      box-shadow: 0 0 10px var(--cyan-glow);
+    }
+    .nav .page-info {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+      color: var(--text-dim);
+      min-width: 80px;
+      text-align: center;
+    }
+    .nav .dots {
+      display: flex;
+      gap: 6px;
+    }
+    .nav .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.2);
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    .nav .dot.active {
+      background: var(--cyan);
+      box-shadow: 0 0 8px var(--cyan-glow);
+    }
+
+    /* ========== ANIMATIONS ========== */
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(24px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+    @keyframes scaleIn {
+      from { opacity: 0; transform: scale(0.85); }
+      to   { opacity: 1; transform: scale(1); }
+    }
+    @keyframes slideInLeft {
+      from { opacity: 0; transform: translateX(-40px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes slideInRight {
+      from { opacity: 0; transform: translateX(40px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes glowPulse {
+      0%, 100% { box-shadow: 0 0 8px rgba(0,243,255,0.15); }
+      50%      { box-shadow: 0 0 20px rgba(0,243,255,0.35); }
+    }
+
+    .anim-up   { animation: fadeInUp 0.6s ease-out both; }
+    .anim-in   { animation: fadeIn 0.6s ease-out both; }
+    .anim-scale{ animation: scaleIn 0.7s ease-out both; }
+    .anim-left { animation: slideInLeft 0.6s ease-out both; }
+    .anim-right{ animation: slideInRight 0.6s ease-out both; }
+
+    .d1 { animation-delay: 0.1s; }
+    .d2 { animation-delay: 0.25s; }
+    .d3 { animation-delay: 0.4s; }
+    .d4 { animation-delay: 0.55s; }
+    .d5 { animation-delay: 0.7s; }
+    .d6 { animation-delay: 0.85s; }
+    .d7 { animation-delay: 1.0s; }
+    .d8 { animation-delay: 1.15s; }
+
+    /* ========== COVER (from 模板.html) ========== */
+    .cover-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 5rem;
+      font-weight: 700;
+      margin: 24px 0;
+      line-height: 1.1;
+    }
+    .cover-title .ct1 { color: var(--gold); text-shadow: 0 0 18px var(--gold-glow); }
+    .cover-title .ct2 { color: var(--cyan); text-shadow: 0 0 18px var(--cyan-glow); }
+    .cover-title .ct3 { color: var(--magenta); text-shadow: 0 0 18px var(--magenta-glow); }
+
+    @keyframes titleGlow {
+      0%   { opacity: 0; transform: scale(0.8); }
+      60%  { opacity: 0.8; }
+      100% { opacity: 1; transform: scale(1);
+        text-shadow:
+          0 0 12px var(--gold), 0 0 20px var(--gold),
+          0 0 12px var(--cyan), 0 0 20px var(--cyan),
+          0 0 12px var(--magenta), 0 0 20px var(--magenta);
+      }
+    }
+    .cover-title { animation: titleGlow 1.2s ease-out both; }
+
+    .cover-sub {
+      font-size: 2.6rem;
+      font-weight: 600;
+      margin: 28px 0;
+      letter-spacing: 1px;
+      color: var(--text);
+    }
+
+    .cover-divider {
+      width: 120px;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--gold), transparent);
+      margin: 30px auto;
+    }
+    @keyframes slideIn {
+      from { width: 0; }
+      to   { width: 120px; }
+    }
+    .cover-divider { animation: slideIn 0.7s ease-out 1.2s both; }
+
+    .cover-journey {
+      font-size: 1.2rem;
+      opacity: 0.8;
+      letter-spacing: 2px;
+      margin: 8px 0;
+      color: var(--text-dim);
+    }
+
+    .cover-formula {
+      font-size: 3.6rem;
+      font-weight: 800;
+      margin: 36px 0;
+      line-height: 1.2;
+    }
+    .cover-formula .cf1 { color: white; }
+    .cover-formula .cf2 { color: var(--cyan); text-shadow: 0 0 14px var(--cyan-glow); }
+    .cover-formula .cf3 { color: var(--magenta); text-shadow: 0 0 14px var(--magenta-glow); }
+    @keyframes formulaReveal {
+      0%   { opacity: 0; transform: translateY(20px); }
+      50%  { opacity: 0.6; }
+      100% { opacity: 1; transform: translateY(0);
+        text-shadow: 0 0 10px rgba(255,215,0,0.3), 0 0 16px var(--cyan), 0 0 16px var(--magenta);
+      }
+    }
+    .cover-formula { animation: formulaReveal 1.4s ease-out 2.0s both; }
+
+    .cover-footnote {
+      font-size: 1.05rem;
+      opacity: 0.7;
+      margin-top: 16px;
+      color: var(--text-dim);
+    }
+    .cover-footnote { animation: fadeInUp 0.7s ease-out 3.0s both; }
+
+    .cover-explain {
+      display: flex;
+      justify-content: center;
+      gap: 40px;
+      margin-top: 12px;
+      font-size: 1rem;
+      color: var(--text-dim);
+      opacity: 0.6;
+    }
+    .cover-explain { animation: fadeIn 0.8s ease-out 3.4s both; }
+
+    /* ========== EXTENDED COMPONENTS (Ch6) ========== */
+
+    /* --- Slide Header (non-cover) --- */
+    .slide-header {
+      margin-bottom: 28px;
+      text-align: center;
+    }
+    .slide-header h2 {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 3rem;
+      font-weight: 700;
+      color: white;
+      margin-bottom: 8px;
+    }
+    .slide-header h2 .gold   { color: var(--gold); text-shadow: 0 0 14px var(--gold-glow); }
+    .slide-header h2 .cyan   { color: var(--cyan); text-shadow: 0 0 14px var(--cyan-glow); }
+    .slide-header h2 .magenta{ color: var(--magenta); text-shadow: 0 0 14px var(--magenta-glow); }
+    .slide-header .sub    { font-size: 1.3rem; color: var(--text-dim); font-weight: 400; }
+    .slide-header .sub-en { font-size: 1rem; color: var(--text-dim); opacity: 0.6; letter-spacing: 2px; }
+
+    /* --- Dual Column --- */
+    .dual-col {
+      display: flex;
+      gap: 40px;
+      width: 100%;
+      max-width: 1600px;
+      align-items: flex-start;
+    }
+    .dual-col .col {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* --- Card --- */
+    .card {
+      background: var(--dark-card);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 22px 28px;
+      text-align: left;
+      backdrop-filter: blur(6px);
+    }
+    .card-sm {
+      background: var(--dark-card);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 18px 22px;
+      text-align: left;
+    }
+
+    /* --- Colored Card Borders --- */
+    .card-cyan   { border-color: rgba(0, 243, 255, 0.3); }
+    .card-gold   { border-color: rgba(255, 215, 0, 0.3); }
+    .card-magenta{ border-color: rgba(255, 0, 200, 0.3); }
+    .card-red    { border-color: rgba(255, 77, 77, 0.3); }
+    .card-green  { border-color: rgba(0, 200, 120, 0.3); }
+    .card-purple { border-color: rgba(180, 130, 255, 0.3); }
+
+    /* --- Card Header Bar --- */
+    .card-header {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.95rem;
+      font-weight: 500;
+      padding: 10px 20px;
+      border-radius: 10px;
+      margin-bottom: 16px;
+      display: inline-block;
+    }
+    .ch-cyan    { background: rgba(0, 243, 255, 0.12); color: var(--cyan); }
+    .ch-gold    { background: rgba(255, 215, 0, 0.12); color: var(--gold); }
+    .ch-magenta { background: rgba(255, 0, 200, 0.12); color: var(--magenta); }
+    .ch-red     { background: rgba(255, 77, 77, 0.12); color: var(--red); }
+    .ch-green   { background: rgba(0, 200, 120, 0.12); color: var(--green); }
+    .ch-purple  { background: rgba(180, 130, 255, 0.12); color: var(--purple); }
+
+    /* --- Bullet Item --- */
+    .bullet-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      font-size: 1.1rem;
+      line-height: 1.6;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+    .bullet-dot {
+      width: 8px;
+      height: 8px;
+      min-width: 8px;
+      border-radius: 50%;
+      margin-top: 10px;
+    }
+    .bullet-dot.gold   { background: var(--gold); }
+    .bullet-dot.cyan   { background: var(--cyan); }
+    .bullet-dot.green  { background: var(--green); }
+    .bullet-dot.magenta{ background: var(--magenta); }
+    .bullet-dot.red    { background: var(--red); }
+    .bullet-dot.purple { background: var(--purple); }
+
+    /* --- Pill Tag --- */
+    .pill {
+      display: inline-block;
+      padding: 6px 18px;
+      border-radius: 20px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+      font-weight: 500;
+      margin: 4px;
+    }
+    .pill-cyan   { background: rgba(0, 243, 255, 0.12); color: var(--cyan); border: 1px solid rgba(0, 243, 255, 0.3); }
+    .pill-gold   { background: rgba(255, 215, 0, 0.12); color: var(--gold); border: 1px solid rgba(255, 215, 0, 0.3); }
+    .pill-magenta{ background: rgba(255, 0, 200, 0.12); color: var(--magenta); border: 1px solid rgba(255, 0, 200, 0.3); }
+    .pill-red    { background: rgba(255, 77, 77, 0.12); color: var(--red); border: 1px solid rgba(255, 77, 77, 0.3); }
+    .pill-green  { background: rgba(0, 200, 120, 0.12); color: var(--green); border: 1px solid rgba(0, 200, 120, 0.3); }
+    .pill-purple { background: rgba(180, 130, 255, 0.12); color: var(--purple); border: 1px solid rgba(180, 130, 255, 0.3); }
+
+    /* --- Grid Layouts --- */
+    .grid-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 28px;
+      width: 100%;
+      max-width: 1600px;
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 28px;
+      width: 100%;
+      max-width: 1600px;
+    }
+
+    /* --- Flow Arrow --- */
+    .flow-arrow {
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--gold);
+      font-size: 1.4rem;
+      margin: 0 8px;
+      opacity: 0.7;
+    }
+
+    /* --- Bottom Quote / Banner --- */
+    .bottom-quote {
+      font-size: 1.15rem;
+      font-weight: 600;
+      color: var(--gold);
+      letter-spacing: 1px;
+      margin-top: 20px;
+      padding: 14px 32px;
+      border: 1px solid rgba(255, 215, 0, 0.25);
+      border-radius: 12px;
+      background: rgba(255, 215, 0, 0.04);
+    }
+
+    /* --- Metric Number --- */
+    .metric {
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 700;
+    }
+    .metric-lg { font-size: 3.2rem; }
+    .metric-md { font-size: 2.2rem; }
+
+    /* --- Terminal / Code Block --- */
+    .code-block {
+      background: rgba(8, 8, 12, 0.9);
+      border: 1px solid rgba(0, 243, 255, 0.2);
+      border-radius: 12px;
+      padding: 24px 28px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.92rem;
+      line-height: 1.8;
+      text-align: left;
+      color: var(--text);
+      white-space: pre-wrap;
+    }
+    .code-block .hl-gold   { color: var(--gold); font-weight: 500; }
+    .code-block .hl-cyan   { color: var(--cyan); font-weight: 500; }
+    .code-block .hl-magenta{ color: var(--magenta); font-weight: 500; }
+    .code-block .hl-green  { color: var(--green); font-weight: 500; }
+    .code-block .hl-red    { color: var(--red); font-weight: 500; }
+    .code-block .hl-purple { color: var(--purple); font-weight: 500; }
+
+    /* --- Alert Box --- */
+    .alert-box {
+      border-radius: 12px;
+      padding: 18px 28px;
+      font-size: 1.05rem;
+      line-height: 1.6;
+      text-align: left;
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+    }
+    .alert-red   { background: rgba(255, 77, 77, 0.08); border: 1px solid rgba(255, 77, 77, 0.3); color: var(--red); }
+    .alert-green { background: rgba(0, 200, 120, 0.08); border: 1px solid rgba(0, 200, 120, 0.3); color: var(--green); }
+    .alert-cyan  { background: rgba(0, 243, 255, 0.06); border: 1px solid rgba(0, 243, 255, 0.25); color: var(--cyan); }
+    .alert-gold  { background: rgba(255, 215, 0, 0.06); border: 1px solid rgba(255, 215, 0, 0.25); color: var(--gold); }
+
+    /* --- Three Dots Decoration --- */
+    .three-dots {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      margin-top: 28px;
+    }
+    .three-dots span {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      opacity: 0.5;
+    }
+    .three-dots span:nth-child(1) { background: var(--cyan); }
+    .three-dots span:nth-child(2) { background: var(--gold); }
+    .three-dots span:nth-child(3) { background: var(--magenta); }
+
+    /* --- Icon Sizing --- */
+    .icon-lg { font-size: 1.6rem; margin-right: 8px; }
+    .icon-xl { font-size: 2.2rem; margin-right: 12px; }
+
+    /* --- Badge Label --- */
+    .badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      padding: 4px 14px;
+      border-radius: 6px;
+      display: inline-block;
+    }
+    .badge-green { background: rgba(0,200,120,0.15); color: var(--green); border: 1px solid rgba(0,200,120,0.3); }
+    .badge-red   { background: rgba(255,77,77,0.15); color: var(--red); border: 1px solid rgba(255,77,77,0.3); }
+    .badge-gold  { background: rgba(255,215,0,0.15); color: var(--gold); border: 1px solid rgba(255,215,0,0.3); }
+    .badge-purple{ background: rgba(180,130,255,0.15); color: var(--purple); border: 1px solid rgba(180,130,255,0.3); }
+    .badge-cyan  { background: rgba(0,243,255,0.15); color: var(--cyan); border: 1px solid rgba(0,243,255,0.3); }
+
+    /* --- Progress Bar --- */
+    .progress-bar {
+      width: 100%;
+      height: 10px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 5px;
+      overflow: hidden;
+      margin: 8px 0;
+    }
+    .progress-bar .fill {
+      height: 100%;
+      border-radius: 5px;
+      transition: width 0.6s ease;
+    }
+
+    /* --- Timeline --- */
+    .timeline-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 0;
+      width: 100%;
+      max-width: 1600px;
+      position: relative;
+    }
+    .timeline-row::before {
+      content: "";
+      position: absolute;
+      top: 36px;
+      left: 60px;
+      right: 60px;
+      height: 3px;
+      background: linear-gradient(90deg, var(--gold), var(--cyan), var(--green));
+      border-radius: 2px;
+    }
+    .timeline-node {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      position: relative;
+      z-index: 1;
+    }
+    .timeline-dot {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      margin-bottom: 16px;
+      border: 3px solid;
+    }
+
+    /* --- Big Stat Card --- */
+    .stat-card {
+      background: var(--dark-card);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 28px 24px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+    .stat-card .stat-num {
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 700;
+      font-size: 2.8rem;
+    }
+    .stat-card .stat-label {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .stat-card .stat-desc {
+      font-size: 0.95rem;
+      color: var(--text-dim);
+      line-height: 1.6;
+    }
+
+    /* --- Layer Card (for security layers) --- */
+    .layer-card {
+      background: var(--dark-card);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 24px 28px;
+      text-align: left;
+      flex: 1;
+    }
+    .layer-card .layer-num {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+
+    /* --- Config JSON Block --- */
+    .json-block {
+      background: rgba(8, 8, 12, 0.9);
+      border: 1px solid rgba(180, 130, 255, 0.25);
+      border-radius: 12px;
+      padding: 20px 24px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.88rem;
+      line-height: 1.75;
+      text-align: left;
+      color: var(--text);
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <!-- SNOWFLAKES -->
+  <div id="snowfield"></div>
+
+  <!-- DECK -->
+  <div class="deck" id="deck">
+
+    <!-- ==================== SLIDE 1: 封面页 ==================== -->
+    <div class="slide active" data-idx="1">
+      <div class="tag anim-up d1">CHAPTER · 06</div>
+      <div class="cover-title anim-in d2">
+        <span class="ct1">Claude Code</span> <span class="ct2">Harness</span>
+      </div>
+      <div class="cover-sub anim-up d3">核心要点解析指南</div>
+      <div class="cover-divider"></div>
+      <div class="cover-journey anim-up d4" style="color:var(--gold);font-weight:600;">第 6 章：MCP 模型上下文协议集成</div>
+      <div class="slide-subtitle-en anim-in d5">Model Context Protocol Integration</div>
+      <div class="three-dots anim-scale d7">
+        <span></span><span></span><span></span>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 2: 章节导览 ==================== -->
+    <div class="slide" data-idx="2">
+      <div class="dual-col">
+        <div class="col anim-left d1">
+          <div class="card card-purple">
+            <div class="card-header ch-purple">【第五章回顾】</div>
+            <div style="font-size:1.3rem;font-weight:600;margin-bottom:16px;color:var(--text);">上一章掌握的核心</div>
+            <div class="bullet-item"><div class="bullet-dot gold"></div>17 个事件拦截点</div>
+            <div class="bullet-item"><div class="bullet-dot gold"></div>6 层配置作用域</div>
+            <div class="bullet-item"><div class="bullet-dot gold"></div>三道防线机制</div>
+            <div class="bullet-item"><div class="bullet-dot gold"></div>代码即法律</div>
+          </div>
+        </div>
+        <div class="col anim-right d2">
+          <div class="card card-gold">
+            <div class="card-header ch-gold">【本章重点】</div>
+            <div style="font-family:'Orbitron',sans-serif;font-size:2.6rem;font-weight:700;color:var(--gold);margin-bottom:14px;text-shadow:0 0 14px var(--gold-glow);">MCP</div>
+            <div style="font-size:1.3rem;font-weight:600;color:var(--text);margin-bottom:18px;">模型上下文协议</div>
+            <div style="width:80px;height:2px;background:linear-gradient(90deg,transparent,var(--gold),transparent);margin:0 auto 18px;"></div>
+            <div style="font-size:1.05rem;color:var(--text-dim);line-height:1.8;">
+              让 AI 安全、标准地<br>接入企业数据系统
+            </div>
+            <div style="margin-top:16px;font-size:0.95rem;color:var(--gold);opacity:0.8;padding:10px 16px;border:1px solid rgba(255,215,0,0.2);border-radius:8px;">
+              → AI 集成混乱的终结方案
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 3: 真实场景 ==================== -->
+    <div class="slide" data-idx="3">
+      <div style="width:100%;max-width:1600px;">
+        <div class="slide-header anim-up d1">
+          <div class="pill pill-gold" style="margin-bottom:12px;">[ 真实场景 ]</div>
+          <h2>一个<span class="gold">看似简单</span>的需求</h2>
+        </div>
+        <div class="dual-col anim-in d2">
+          <div class="col">
+            <div class="card card-cyan">
+              <div style="font-size:1.3rem;margin-bottom:14px;">🔹 <span style="font-weight:600;color:var(--cyan);">产品经理</span> <span style="color:var(--text-dim);font-size:0.95rem;">｜技术评审会议上</span></div>
+              <div style="font-size:1.1rem;line-height:1.8;color:var(--text);padding:14px 18px;background:rgba(0,243,255,0.04);border-radius:10px;border-left:3px solid var(--cyan);">
+                "让 <span style="color:var(--gold);">Claude</span> 分析 <span style="color:var(--purple);">Jira</span> 中上周所有 <span style="color:var(--red);">P1 级 bug</span> 的分布规律"
+              </div>
+            </div>
+          </div>
+          <div class="col">
+            <div class="card card-gold">
+              <div style="font-size:1.3rem;margin-bottom:14px;">🔸 <span style="font-weight:600;color:var(--gold);">萌新 · 开发工程师</span> <span style="color:var(--text-dim);font-size:0.95rem;">｜心中疑问</span></div>
+              <div style="font-size:1.1rem;line-height:2;color:var(--text);">
+                <span style="color:var(--purple);">Jira</span> 在公司内网<br>
+                <span style="color:var(--gold);">Claude</span> 在云端<br>
+                <span style="color:var(--text-dim);">两个世界 — 怎样互通？</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 4: 传统方案 vs MCP ==================== -->
+    <div class="slide" data-idx="4">
+      <div style="width:100%;max-width:1600px;">
+        <div class="slide-header anim-up d1">
+          <h2>传统方案 <span class="gold">vs</span> MCP</h2>
+          <div class="sub">如何让 AI 安全接入企业数据？</div>
+        </div>
+        <div class="grid-3 anim-scale d2">
+          <!-- 方案01 -->
+          <div class="card card-red" style="text-align:center;padding:28px 20px;">
+            <div style="font-size:2rem;margin-bottom:8px;">📌</div>
+            <div class="pill pill-red" style="margin-bottom:14px;">方案 01</div>
+            <div style="font-family:'Orbitron',sans-serif;font-size:1.4rem;font-weight:700;color:var(--red);margin-bottom:16px;">手动导出粘贴</div>
+            <div style="font-size:0.95rem;color:var(--text-dim);line-height:1.8;margin-bottom:16px;">
+              导出 Excel<br>→ 复制<br>→ 粘贴到对话框
+            </div>
+            <div style="background:rgba(255,77,77,0.12);border-radius:8px;padding:10px 14px;font-size:0.9rem;color:var(--red);">
+              ⚠️ 效率低 · 数据陈旧 · 无法自动化
+            </div>
+          </div>
+          <!-- 方案02 -->
+          <div class="card card-cyan" style="text-align:center;padding:28px 20px;">
+            <div style="font-size:2rem;margin-bottom:8px;">🔧</div>
+            <div class="pill pill-cyan" style="margin-bottom:14px;">方案 02</div>
+            <div style="font-family:'Orbitron',sans-serif;font-size:1.4rem;font-weight:700;color:var(--cyan);margin-bottom:16px;">脚本抓取投喂</div>
+            <div style="font-size:0.95rem;color:var(--text-dim);line-height:1.8;margin-bottom:16px;">
+              为每个数据源<br>写专属适配器
+            </div>
+            <div style="background:rgba(0,243,255,0.1);border-radius:8px;padding:10px 14px;font-size:0.9rem;color:var(--cyan);">
+              ⚠️ 维护成本高 · 重复造轮子
+            </div>
+          </div>
+          <!-- 方案03 -->
+          <div class="card card-gold" style="text-align:center;padding:28px 20px;position:relative;">
+            <div style="position:absolute;top:14px;right:14px;"><span class="badge badge-gold">推荐</span></div>
+            <div style="font-size:2rem;margin-bottom:8px;">✅</div>
+            <div class="pill pill-gold" style="margin-bottom:14px;">方案 03</div>
+            <div style="font-family:'Orbitron',sans-serif;font-size:1.4rem;font-weight:700;color:var(--gold);margin-bottom:16px;">MCP 协议</div>
+            <div style="font-size:0.95rem;color:var(--text);line-height:1.8;margin-bottom:16px;font-weight:500;">
+              统一标准 · 即插即用
+            </div>
+            <div style="background:rgba(255,215,0,0.12);border-radius:8px;padding:10px 14px;font-size:0.9rem;color:var(--gold);font-weight:600;">
+              ✓ 安全 · 标准 · 一次接入
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 5: USB-C 的故事 ==================== -->
+    <div class="slide" data-idx="5">
+      <div style="width:100%;max-width:1600px;">
+        <div class="slide-header anim-up d1">
+          <h2><span class="cyan">USB-C</span> 的故事</h2>
+          <div class="sub">[ 从混乱专用线 → 统一标准 ]</div>
+        </div>
+        <div class="dual-col anim-in d2" style="margin-bottom:24px;">
+          <div class="col">
+            <div class="card card-red">
+              <div style="font-size:1.3rem;margin-bottom:16px;">🔴 <span style="font-weight:600;color:var(--red);">之前</span>｜每台设备一根专用线</div>
+              <div class="bullet-item"><div class="bullet-dot red"></div>Micro-USB (Android 旧机)</div>
+              <div class="bullet-item"><div class="bullet-dot red"></div>Lightning (iPhone)</div>
+              <div class="bullet-item"><div class="bullet-dot red"></div>USB-A / Mini-USB / DC 圆头…</div>
+              <div style="margin-top:14px;padding:10px 16px;background:rgba(255,77,77,0.08);border-radius:8px;font-size:0.95rem;color:var(--red);">
+                → 出差恨不得带 6~7 根
+              </div>
+            </div>
+          </div>
+          <div class="col">
+            <div class="card card-green">
+              <div style="font-size:1.3rem;margin-bottom:16px;">🟢 <span style="font-weight:600;color:var(--green);">之后</span>｜一根 USB-C 走天下</div>
+              <div style="text-align:center;margin:18px 0;">
+                <span style="font-family:'Orbitron',sans-serif;font-size:2.4rem;font-weight:700;color:var(--cyan);text-shadow:0 0 14px var(--cyan-glow);background:rgba(0,243,255,0.08);padding:14px 36px;border-radius:14px;border:2px solid rgba(0,243,255,0.3);">USB-C</span>
+              </div>
+              <div class="bullet-item"><div class="bullet-dot green"></div>✓ 手机、平板、笔记本统一</div>
+              <div class="bullet-item"><div class="bullet-dot green"></div>✓ 充电、数据、视频一根搞定</div>
+            </div>
+          </div>
+        </div>
+        <div class="bottom-quote anim-up d4">
+          💡 MCP = AI 工具集成领域的 USB-C
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 6: M × N 问题 ==================== -->
+    <div class="slide" data-idx="6">
+      <div style="width:100%;max-width:1600px;">
+        <div class="slide-header anim-up d1">
+          <h2><span style="color:var(--red);">M × N</span> 问题</h2>
+          <div class="sub">复杂度炸裂的根源</div>
+        </div>
+        <div class="dual-col anim-in d2">
+          <div class="col">
+            <div class="card card-red" style="text-align:center;padding:32px 24px;">
+              <div style="font-size:1.2rem;color:var(--red);font-weight:600;margin-bottom:18px;">📉 问题本质</div>
+              <div style="font-family:'Orbitron',sans-serif;font-size:1.1rem;color:var(--text-dim);margin-bottom:10px;">USB-C 之前 · M 设备 × N 外设</div>
+              <!-- 简化连线示意 -->
+              <div style="display:flex;justify-content:space-around;margin:18px 0;">
+                <div style="display:flex;flex-direction:column;gap:8px;">
+                  <span class="pill pill-cyan">笔记本</span>
+                  <span class="pill pill-cyan">手机</span>
+                  <span class="pill pill-cyan">相机</span>
+                  <span class="pill pill-cyan">平板</span>
+                </div>
+                <div style="display:flex;align-items:center;font-size:2rem;color:var(--red);">×</div>
+                <div style="display:flex;flex-direction:column;gap:8px;">
+                  <span class="pill pill-purple">充电器</span>
+                  <span class="pill pill-purple">显示器</span>
+                  <span class="pill pill-purple">U 盘</span>
+                  <span class="pill pill-purple">读卡器</span>
+                </div>
+              </div>
+              <div style="font-size:0.95rem;color:var(--red);margin-top:10px;">→ 每一对都要专属适配</div>
+            </div>
+          </div>
+          <div class="col" style="gap:20px;">
+            <div class="card card-red" style="text-align:center;">
+              <div style="font-size:1rem;color:var(--text-dim);margin-bottom:8px;">复杂方案</div>
+              <div style="font-family:'Orbitron',sans-serif;font-size:3.6rem;font-weight:700;color:var(--red);text-shadow:0 0 20px rgba(255,77,77,0.4);">M × N</div>
+              <div style="font-size:0.95rem;color:var(--text-dim);margin-top:8px;">每一对都要专属适配</div>
+            </div>
+            <div style="text-align:center;font-size:2rem;color:var(--gold);">↓</div>
+            <div class="card card-green" style="text-align:center;">
+              <div style="font-size:1rem;color:var(--text-dim);margin-bottom:8px;">标准化之后</div>
+              <div style="font-family:'Orbitron',sans-serif;font-size:3.6rem;font-weight:700;color:var(--green);text-shadow:0 0 20px rgba(0,200,120,0.4);">M + N</div>
+              <div style="font-size:0.95rem;color:var(--text-dim);margin-top:8px;">每端只实现一次标准</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 7: 适配器地狱 ==================== -->
+    <div class="slide" data-idx="7">
+      <div style="width:100%;max-width:1600px;">
+        <div class="slide-header anim-up d1">
+          <h2>MCP 出现前 · <span style="color:var(--red);">适配器地狱</span></h2>
+          <div class="sub">每一对 AI × 数据源 都需要独立适配器</div>
+        </div>
+        <div style="display:flex;gap:28px;align-items:center;width:100%;max-width:1600px;margin-bottom:24px;" class="anim-in d2">
+          <!-- 左：AI 客户端 -->
+          <div class="card card-cyan" style="flex:1;padding:24px;">
+            <div style="font-size:1.2rem;font-weight:600;color:var(--cyan);margin-bottom:16px;">▸ 5 个 AI 客户端</div>
+            <div style="display:flex;flex-wrap:wrap;gap:10px;">
+              <span class="pill pill-cyan">Claude</span>
+              <span class="pill pill-cyan">GPT-4</span>
+              <span class="pill pill-cyan">Gemini</span>
+              <span class="pill pill-cyan">Llama</span>
+              <span class="pill pill-cyan">Others...</span>
+            </div>
+          </div>
+          <!-- 中：蛛网地狱图 -->
+          <div style="flex:0 0 360px;display:flex;align-items:center;justify-content:center;">
+            <div style="position:relative;width:320px;height:320px;">
+              <!-- 蛛网 SVG -->
+              <svg viewBox="0 0 320 320" style="width:100%;height:100%;filter:drop-shadow(0 0 18px rgba(255,77,77,0.5));">
+                <!-- 同心圆 -->
+                <circle cx="160" cy="160" r="40" fill="none" stroke="rgba(255,77,77,0.2)" stroke-width="1"/>
+                <circle cx="160" cy="160" r="80" fill="none" stroke="rgba(255,77,77,0.2)" stroke-width="1"/>
+                <circle cx="160" cy="160" r="120" fill="none" stroke="rgba(255,77,77,0.15)" stroke-width="1"/>
+                <circle cx="160" cy="160" r="150" fill="none" stroke="rgba(255,77,77,0.1)" stroke-width="1"/>
+                <!-- 放射线（蛛丝） -->
+                <line x1="160" y1="160" x2="160" y2="10" stroke="rgba(255,77,77,0.25)" stroke-width="1"/>
+                <line x1="160" y1="160" x2="266" y2="30" stroke="rgba(255,77,77,0.25)" stroke-width="1"/>
+                <line x1="160" y1="160" x2="310" y2="120" stroke="rgba(255,77,77,0.25)" stroke-width="1"/>
+                <line x1="160" y1="160" x2="310" y2="200" stroke="rgba(255,77,77,0.25)" stroke-width="1"/>
+                <line x1="160" y1="160" x2="266" y2="290" stroke="rgba(255,77,77,0.25)" stroke-width="1"/>
+                <line x1="160" y1="160" x2="160" y2="310" stroke="rgba(255,77,77,0.25)" stroke-width="1"/>
+                <line x1="160" y1="160" x2="54" y2="290" stroke="rgba(255,77,77,0.25)" stroke-width="1"/>
+                <line x1="160" y1="160" x2="10" y2="200" stroke="rgba(255,77,77,0.25)" stroke-width="1"/>
+                <line x1="160" y1="160" x2="10" y2="120" stroke="rgba(255,77,77,0.25)" stroke-width="1"/>
+                <line x1="160" y1="160" x2="54" y2="30" stroke="rgba(255,77,77,0.25)" stroke-width="1"/>
+                <!-- 交叉连线（蛛网缠绕） -->
+                <line x1="160" y1="10" x2="266" y2="30" stroke="rgba(255,77,77,0.12)" stroke-width="1"/>
+                <line x1="266" y1="30" x2="310" y2="120" stroke="rgba(255,77,77,0.12)" stroke-width="1"/>
+                <line x1="310" y1="120" x2="310" y2="200" stroke="rgba(255,77,77,0.12)" stroke-width="1"/>
+                <line x1="310" y1="200" x2="266" y2="290" stroke="rgba(255,77,77,0.12)" stroke-width="1"/>
+                <line x1="266" y1="290" x2="160" y2="310" stroke="rgba(255,77,77,0.12)" stroke-width="1"/>
+                <line x1="160" y1="310" x2="54" y2="290" stroke="rgba(255,77,77,0.12)" stroke-width="1"/>
+                <line x1="54" y1="290" x2="10" y2="200" stroke="rgba(255,77,77,0.12)" stroke-width="1"/>
+                <line x1="10" y1="200" x2="10" y2="120" stroke="rgba(255,77,77,0.12)" stroke-width="1"/>
+                <line x1="10" y1="120" x2="54" y2="30" stroke="rgba(255,77,77,0.12)" stroke-width="1"/>
+                <line x1="54" y1="30" x2="160" y2="10" stroke="rgba(255,77,77,0.12)" stroke-width="1"/>
+                <!-- 外层交叉 -->
+                <line x1="160" y1="10" x2="310" y2="200" stroke="rgba(255,0,200,0.08)" stroke-width="1"/>
+                <line x1="266" y1="30" x2="10" y2="200" stroke="rgba(255,0,200,0.08)" stroke-width="1"/>
+                <line x1="310" y1="120" x2="54" y2="290" stroke="rgba(255,0,200,0.08)" stroke-width="1"/>
+                <line x1="310" y1="200" x2="160" y2="10" stroke="rgba(255,0,200,0.08)" stroke-width="1"/>
+                <line x1="266" y1="290" x2="10" y2="120" stroke="rgba(255,0,200,0.08)" stroke-width="1"/>
+                <line x1="160" y1="310" x2="310" y2="120" stroke="rgba(255,0,200,0.08)" stroke-width="1"/>
+                <line x1="54" y1="290" x2="266" y2="30" stroke="rgba(255,0,200,0.08)" stroke-width="1"/>
+                <line x1="10" y1="200" x2="266" y2="290" stroke="rgba(255,0,200,0.08)" stroke-width="1"/>
+                <line x1="10" y1="120" x2="160" y2="310" stroke="rgba(255,0,200,0.08)" stroke-width="1"/>
+                <line x1="54" y1="30" x2="310" y2="200" stroke="rgba(255,0,200,0.08)" stroke-width="1"/>
+                <!-- 节点光点 -->
+                <circle cx="160" cy="10" r="4" fill="rgba(255,77,77,0.7)"/>
+                <circle cx="266" cy="30" r="4" fill="rgba(255,77,77,0.7)"/>
+                <circle cx="310" cy="120" r="4" fill="rgba(255,77,77,0.7)"/>
+                <circle cx="310" cy="200" r="4" fill="rgba(255,77,77,0.7)"/>
+                <circle cx="266" cy="290" r="4" fill="rgba(255,77,77,0.7)"/>
+                <circle cx="160" cy="310" r="4" fill="rgba(255,77,77,0.7)"/>
+                <circle cx="54" cy="290" r="4" fill="rgba(255,77,77,0.7)"/>
+                <circle cx="10" cy="200" r="4" fill="rgba(255,77,77,0.7)"/>
+                <circle cx="10" cy="120" r="4" fill="rgba(255,77,77,0.7)"/>
+                <circle cx="54" cy="30" r="4" fill="rgba(255,77,77,0.7)"/>
+                <!-- 中心圆 -->
+                <circle cx="160" cy="160" r="52" fill="rgba(255,77,77,0.15)" stroke="rgba(255,77,77,0.6)" stroke-width="2"/>
+                <circle cx="160" cy="160" r="52" fill="none" stroke="rgba(255,77,77,0.3)" stroke-width="1" stroke-dasharray="4 4">
+                  <animateTransform attributeName="transform" type="rotate" from="0 160 160" to="360 160 160" dur="30s" repeatCount="indefinite"/>
+                </circle>
+              </svg>
+              <!-- 中心文字 -->
+              <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;z-index:2;">
+                <div style="font-family:'Orbitron',sans-serif;font-size:1.8rem;font-weight:700;color:var(--red);text-shadow:0 0 20px rgba(255,77,77,0.6);">500</div>
+                <div style="font-size:0.8rem;color:var(--text-dim);white-space:nowrap;">个适配器</div>
+              </div>
+            </div>
+          </div>
+          <!-- 右：数据源 -->
+          <div class="card card-purple" style="flex:1;padding:24px;">
+            <div style="font-size:1.2rem;font-weight:600;color:var(--purple);margin-bottom:16px;">▸ 100 个数据源</div>
+            <div style="display:flex;flex-wrap:wrap;gap:10px;">
+              <span class="pill pill-purple">Jira</span>
+              <span class="pill pill-purple">GitHub</span>
+              <span class="pill pill-purple">Slack</span>
+              <span class="pill pill-purple">Notion</span>
+              <span class="pill pill-purple">DB</span>
+              <span class="pill pill-purple">FS</span>
+              <span class="pill pill-purple">S3</span>
+              <span class="pill pill-purple">Email</span>
+              <span class="pill pill-purple">… 共 100+ 种</span>
+            </div>
+          </div>
+        </div>
+        <div class="alert-box alert-red anim-up d3" style="max-width:1600px;justify-content:center;">
+          <span style="font-size:1.3rem;">❗</span>
+          <div>
+            <span style="font-weight:700;font-size:1.2rem;">5 × 100 = 500 个适配器需要维护</span>
+            <span style="margin-left:16px;opacity:0.8;">→ 这是 M × N 的地狱</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 8: MCP 标准化方案 ==================== -->
+    <div class="slide" data-idx="8">
+      <div style="width:100%;max-width:1600px;">
+        <div class="slide-header anim-up d1">
+          <h2><span class="gold">MCP</span> 标准化方案</h2>
+          <div class="sub">定义统一协议 · 即插即用</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:32px;justify-content:center;width:100%;max-width:1600px;margin-bottom:24px;" class="anim-scale d2">
+          <!-- 之前 -->
+          <div class="card card-red" style="text-align:center;padding:28px 32px;flex:1;">
+            <div style="font-size:1rem;color:var(--text-dim);margin-bottom:8px;">← 之前 · M × N</div>
+            <div style="font-family:'Orbitron',sans-serif;font-size:4rem;font-weight:700;color:var(--red);text-shadow:0 0 24px rgba(255,77,77,0.4);">500</div>
+            <div style="font-size:1.1rem;color:var(--text);margin-top:6px;">个独立适配器</div>
+            <div style="font-size:0.85rem;color:var(--text-dim);margin-top:8px;">5 客户端 × 100 数据源</div>
+          </div>
+          <!-- MCP 中间 -->
+          <div style="text-align:center;">
+            <div style="font-family:'Orbitron',sans-serif;font-size:1.8rem;font-weight:700;color:var(--gold);text-shadow:0 0 14px var(--gold-glow);background:rgba(255,215,0,0.08);padding:18px 32px;border-radius:16px;border:2px solid rgba(255,215,0,0.3);margin-bottom:10px;">MCP</div>
+            <div style="font-size:0.9rem;color:var(--text-dim);">统一协议层</div>
+          </div>
+          <!-- 之后 -->
+          <div class="card card-green" style="text-align:center;padding:28px 32px;flex:1;">
+            <div style="font-size:1rem;color:var(--text-dim);margin-bottom:8px;">之后 · M + N →</div>
+            <div style="font-family:'Orbitron',sans-serif;font-size:4rem;font-weight:700;color:var(--green);text-shadow:0 0 24px rgba(0,200,120,0.4);">105</div>
+            <div style="font-size:1.1rem;color:var(--text);margin-top:6px;">次标准实现</div>
+            <div style="font-size:0.85rem;color:var(--text-dim);margin-top:8px;">每端只实现一次协议</div>
+          </div>
+        </div>
+        <div class="bottom-quote anim-up d4" style="background:rgba(255,215,0,0.06);border-color:rgba(255,215,0,0.3);">
+          📊 工作量降低 <span style="color:var(--gold);font-size:1.4rem;">79%</span> — 这就是标准化的复利
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 9: 从内部项目到行业标准 ==================== -->
+    <div class="slide" data-idx="9">
+      <div style="width:100%;max-width:1600px;">
+        <div class="slide-header anim-up d1">
+          <h2>从内部项目到<span class="gold">行业标准</span></h2>
+          <div class="sub">仅用 13 个月走完一个协议的成长之路</div>
+        </div>
+        <div class="timeline-row anim-in d2" style="margin-bottom:28px;">
+          <div class="timeline-node">
+            <div class="timeline-dot" style="background:rgba(255,215,0,0.2);border-color:var(--gold);"></div>
+            <div class="pill pill-gold" style="margin-bottom:14px;">🕒 2024.11</div>
+            <div class="card card-gold" style="text-align:center;padding:22px 18px;">
+              <div style="font-size:1.2rem;font-weight:600;color:var(--gold);margin-bottom:10px;">Anthropic 发布</div>
+              <div style="font-size:0.95rem;color:var(--text-dim);line-height:1.7;">
+                • MCP 协议正式开源<br>
+                • 内部项目首度亮相
+              </div>
+            </div>
+          </div>
+          <div class="timeline-node">
+            <div class="timeline-dot" style="background:rgba(0,243,255,0.2);border-color:var(--cyan);"></div>
+            <div class="pill pill-cyan" style="margin-bottom:14px;">✅ 2025.03</div>
+            <div class="card card-cyan" style="text-align:center;padding:22px 18px;">
+              <div style="font-size:1.2rem;font-weight:600;color:var(--cyan);margin-bottom:10px;">OpenAI 采纳</div>
+              <div style="font-size:0.95rem;color:var(--text-dim);line-height:1.7;">
+                • 深度集成至 ChatGPT<br>
+                • 桌面应用
+              </div>
+            </div>
+          </div>
+          <div class="timeline-node">
+            <div class="timeline-dot" style="background:rgba(0,200,120,0.2);border-color:var(--green);"></div>
+            <div class="pill pill-green" style="margin-bottom:14px;">🌐 2025.12</div>
+            <div class="card card-green" style="text-align:center;padding:22px 18px;">
+              <div style="font-size:1.2rem;font-weight:600;color:var(--green);margin-bottom:10px;">Linux 基金会</div>
+              <div style="font-size:0.95rem;color:var(--text-dim);line-height:1.7;">
+                • 捐赠至 Agentic<br>AI Foundation
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="three-dots anim-scale d4">
+          <span></span><span></span><span></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 10: MCP 生态爆发式增长 ==================== -->
+    <div class="slide" data-idx="10">
+      <div style="width:100%;max-width:1600px;">
+        <div class="slide-header anim-up d1">
+          <h2><span class="gold">MCP 生态</span>：爆发式增长</h2>
+        </div>
+        <div class="grid-3 anim-scale d2" style="margin-bottom:24px;">
+          <div class="stat-card" style="border-color:rgba(255,215,0,0.2);">
+            <div style="font-size:2.4rem;">📥</div>
+            <div class="stat-num" style="color:var(--gold);text-shadow:0 0 18px var(--gold-glow);">9700万+</div>
+            <div class="stat-label">月度 SDK 下载</div>
+            <div class="stat-desc">• 开发者用脚投票<br>• 事实标准已形成</div>
+          </div>
+          <div class="stat-card" style="border-color:rgba(0,243,255,0.2);">
+            <div style="font-size:2.4rem;">🖥️</div>
+            <div class="stat-num" style="color:var(--cyan);text-shadow:0 0 18px var(--cyan-glow);">10,000+</div>
+            <div class="stat-label">公开 MCP 服务器</div>
+            <div class="stat-desc">• 社区贡献的能力<br>- 即插即用 -</div>
+          </div>
+          <div class="stat-card" style="border-color:rgba(0,200,120,0.2);">
+            <div style="font-size:2.4rem;">🔗</div>
+            <div class="stat-num" style="color:var(--green);text-shadow:0 0 18px rgba(0,200,120,0.6);">75+</div>
+            <div class="stat-label">官方连接器</div>
+            <div class="stat-desc">• 主流 SaaS 已覆盖<br>- 开箱即用 -</div>
+          </div>
+        </div>
+        <div class="bottom-quote anim-up d4">
+          ✨ 标准化的力量
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 11: 客户端-服务器架构 ==================== -->
+    <div class="slide" data-idx="11">
+      <div style="width:100%;max-width:1600px;">
+        <div class="slide-header anim-up d1">
+          <div class="pill pill-gold" style="margin-bottom:12px;">【第6章 · 第11节】</div>
+          <h2>客户端-服务器架构</h2>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:18px;width:100%;max-width:1400px;" class="anim-in d2">
+          <!-- 顶层 -->
+          <div class="card card-cyan" style="display:flex;align-items:center;gap:24px;padding:24px 32px;">
+            <div style="font-size:2.4rem;">🖥️</div>
+            <div style="flex:1;">
+              <div style="font-size:1.3rem;font-weight:600;color:var(--cyan);margin-bottom:6px;">顶层 · MCP 客户端</div>
+              <div style="font-size:1rem;color:var(--text-dim);line-height:1.6;">Claude Code / Claude Desktop · 发起请求、消费能力</div>
+            </div>
+            <span class="badge badge-cyan">Client</span>
+          </div>
+          <!-- 双向箭头 -->
+          <div style="text-align:center;font-size:1.6rem;color:var(--gold);opacity:0.6;">↑ ↓</div>
+          <!-- 中层 -->
+          <div class="card card-gold" style="display:flex;align-items:center;gap:24px;padding:24px 32px;">
+            <div style="font-size:2.4rem;font-family:'JetBrains Mono',monospace;color:var(--gold);">&gt;_</div>
+            <div style="flex:1;">
+              <div style="font-size:1.3rem;font-weight:600;color:var(--gold);margin-bottom:6px;">中层 · MCP 协议</div>
+              <div style="font-size:1rem;color:var(--text-dim);line-height:1.6;">基于 JSON-RPC 2.0 · 标准化消息格式 · 双向通信</div>
+            </div>
+            <span class="badge badge-gold">Protocol</span>
+          </div>
+          <!-- 双向箭头 -->
+          <div style="text-align:center;font-size:1.6rem;color:var(--gold);opacity:0.6;">↑ ↓</div>
+          <!-- 底层 -->
+          <div class="card card-green" style="display:flex;align-items:center;gap:24px;padding:24px 32px;">
+            <div style="font-size:2.4rem;">🖧</div>
+            <div style="flex:1;">
+              <div style="font-size:1.3rem;font-weight:600;color:var(--green);margin-bottom:6px;">底层 · MCP 服务器群</div>
+              <div style="font-size:1rem;color:var(--text-dim);line-height:1.6;">封装外部资源 · 数据库 · API · 文件系统 · SaaS 服务</div>
+            </div>
+            <span class="badge badge-green">Servers</span>
+          </div>
+        </div>
+        <div style="font-size:0.9rem;color:var(--text-dim);opacity:0.5;margin-top:18px;" class="anim-up d3"></div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 12: MCP 借鉴 LSP ==================== -->
+    <div class="slide" data-idx="12">
+      <div style="width:100%;max-width:1600px;">
+        <div class="slide-header anim-up d1">
+          <h2><span class="gold">MCP</span> 借鉴 <span class="cyan">LSP</span> 的设计哲学</h2>
+        </div>
+        <div class="dual-col anim-in d2" style="margin-bottom:22px;">
+          <!-- LSP -->
+          <div class="col">
+            <div class="card card-cyan" style="padding:28px;">
+              <div style="font-family:'Orbitron',sans-serif;font-size:1.8rem;font-weight:700;color:var(--cyan);margin-bottom:6px;">LSP</div>
+              <div style="font-size:0.9rem;color:var(--text-dim);margin-bottom:18px;">Language Server Protocol</div>
+              <div class="bullet-item"><div class="bullet-dot cyan"></div><span style="color:var(--cyan);font-weight:600;">Client：</span>VSCode / Vim / IntelliJ</div>
+              <div style="font-size:0.85rem;color:var(--text-dim);margin-left:22px;margin-bottom:10px;">编辑器侧</div>
+              <div style="text-align:center;font-size:1.2rem;color:var(--cyan);opacity:0.5;margin:6px 0;">↓ 协议 ↓</div>
+              <div class="bullet-item"><div class="bullet-dot cyan"></div><span style="color:var(--cyan);font-weight:600;">Server：</span>TypeScript / Rust / Python</div>
+              <div style="font-size:0.85rem;color:var(--text-dim);margin-left:22px;margin-bottom:14px;">语言工具链</div>
+              <div style="text-align:center;padding:10px;background:rgba(0,243,255,0.06);border-radius:8px;font-size:1rem;color:var(--cyan);font-weight:600;">
+                M 编辑器 × N 语言 = M+N
+              </div>
+            </div>
+          </div>
+          <!-- MCP -->
+          <div class="col">
+            <div class="card card-gold" style="padding:28px;">
+              <div style="font-family:'Orbitron',sans-serif;font-size:1.8rem;font-weight:700;color:var(--gold);margin-bottom:6px;">MCP</div>
+              <div style="font-size:0.9rem;color:var(--text-dim);margin-bottom:18px;">Model Context Protocol</div>
+              <div class="bullet-item"><div class="bullet-dot gold"></div><span style="color:var(--gold);font-weight:600;">Client：</span>Claude / ChatGPT / Cursor</div>
+              <div style="font-size:0.85rem;color:var(--text-dim);margin-left:22px;margin-bottom:10px;">AI 应用</div>
+              <div style="text-align:center;font-size:1.2rem;color:var(--gold);opacity:0.5;margin:6px 0;">↓ 协议 ↓</div>
+              <div class="bullet-item"><div class="bullet-dot gold"></div><span style="color:var(--gold);font-weight:600;">Server：</span>数据库 / SaaS / 文件 / API</div>
+              <div style="font-size:0.85rem;color:var(--text-dim);margin-left:22px;margin-bottom:14px;">数字世界</div>
+              <div style="text-align:center;padding:10px;background:rgba(255,215,0,0.06);border-radius:8px;font-size:1rem;color:var(--gold);font-weight:600;">
+                M AI × N 服务 = M+N
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="alert-box alert-gold anim-up d3" style="max-width:1600px;">
+          <span style="font-size:1.4rem;">💡</span>
+          <div>
+            <div style="font-style:italic;line-height:1.7;">"MCP 直接借鉴了 LSP 的设计哲学 —— 用协议消除 N×M 的集成爆炸。"</div>
+            <div style="font-size:0.9rem;color:var(--text-dim);margin-top:6px;">— David Soria Parra · MCP 共同发明人</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 13: Tools 工具能力 ==================== -->
+    <div class="slide" data-idx="13">
+      <div style="width:100%;max-width:1600px;">
+        <div class="slide-header anim-up d1">
+          <h2><span class="gold">Tools</span> · 工具能力</h2>
+          <div class="sub">最核心、最常用的能力</div>
+        </div>
+        <div class="dual-col anim-in d2">
+          <!-- 左侧 Schema -->
+          <div class="col">
+            <div class="card" style="border-color:rgba(255,215,0,0.2);padding:24px;">
+              <div style="font-size:1.1rem;font-weight:600;color:var(--gold);margin-bottom:14px;">🔧 工具定义结构</div>
+              <div class="code-block" style="font-size:0.85rem;line-height:1.7;padding:18px 20px;">
+<span style="color:var(--text-dim);">// MCP Tool Schema</span>
+{
+  <span class="hl-gold">"name"</span>: <span style="color:var(--green);">"create_jira_issue"</span>,
+  <span class="hl-cyan">"description"</span>: <span style="color:var(--green);">"创建 Jira 工单"</span>,
+  <span class="hl-purple">"parameters"</span>: {
+    project: <span style="color:var(--cyan);">string</span>,
+    title: <span style="color:var(--cyan);">string</span>,
+    priority: <span style="color:var(--cyan);">enum</span>
+  },
+  <span class="hl-magenta">"returns"</span>: { issue_id, url }
+}</div>
+              <div style="font-size:0.9rem;color:var(--text-dim);line-height:1.7;margin-top:12px;">
+                ✅ 像调用本地函数一样调用远程能力<br>
+                → 主动决策 · 自动传参 · 自动接收返回
+              </div>
+            </div>
+          </div>
+          <!-- 右侧用例 -->
+          <div class="col" style="gap:16px;">
+            <div class="card card-gold" style="display:flex;align-items:center;gap:18px;padding:20px 24px;">
+              <div style="font-size:1.8rem;">📄</div>
+              <div>
+                <div style="font-weight:600;color:var(--text);margin-bottom:4px;">创建 Jira 工单</div>
+                <div style="font-size:0.9rem;color:var(--text-dim);">从对话直达任务系统</div>
+              </div>
+            </div>
+            <div class="card card-cyan" style="display:flex;align-items:center;gap:18px;padding:20px 24px;">
+              <div style="font-size:1.8rem;">🗃️</div>
+              <div>
+                <div style="font-weight:600;color:var(--text);margin-bottom:4px;">查询生产数据库</div>
+                <div style="font-size:0.9rem;color:var(--text-dim);">SQL 自动生成与执行</div>
+              </div>
+            </div>
+            <div class="card card-purple" style="display:flex;align-items:center;gap:18px;padding:20px 24px;">
+              <div style="font-size:1.8rem;">💬</div>
+              <div>
+                <div style="font-weight:600;color:var(--text);margin-bottom:4px;">发送 Slack 消息</div>
+                <div style="font-size:0.9rem;color:var(--text-dim);">通知 / 告警自动化</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 14: 三类能力对比 ==================== -->
+    <div class="slide" data-idx="14">
+      <div style="width:100%;max-width:1600px;">
+        <div class="slide-header anim-up d1">
+          <h2>三类能力对比</h2>
+        </div>
+        <div class="grid-3 anim-scale d2" style="margin-bottom:22px;">
+          <!-- Tools -->
+          <div class="card card-gold" style="padding:24px 20px;">
+            <div style="font-size:1.6rem;margin-bottom:8px;">🟡</div>
+            <div style="font-family:'Orbitron',sans-serif;font-size:1.3rem;font-weight:700;color:var(--gold);margin-bottom:6px;">Tools｜工具</div>
+            <div class="badge badge-red" style="margin-bottom:14px;">有副作用 · Active</div>
+            <div style="font-size:0.95rem;color:var(--text-dim);line-height:1.7;margin-bottom:14px;">
+              Claude 主动调用的函数，可改变外部世界状态。
+            </div>
+            <div style="font-size:0.9rem;color:var(--text-dim);line-height:1.8;">
+              ▸ 典型用例：<br>
+              <span style="color:var(--text);">- 创建工单</span><br>
+              <span style="color:var(--text);">- SQL 查询</span><br>
+              <span style="color:var(--text);">- 发消息</span>
+            </div>
+          </div>
+          <!-- Resources -->
+          <div class="card card-cyan" style="padding:24px 20px;">
+            <div style="font-size:1.6rem;margin-bottom:8px;">🔵</div>
+            <div style="font-family:'Orbitron',sans-serif;font-size:1.3rem;font-weight:700;color:var(--cyan);margin-bottom:6px;">Resources｜资源</div>
+            <div class="badge badge-green" style="margin-bottom:14px;">只读 · Passive</div>
+            <div style="font-size:0.95rem;color:var(--text-dim);line-height:1.7;margin-bottom:14px;">
+              Claude 按需读取的数据源，不会修改外部状态。
+            </div>
+            <div style="font-size:0.9rem;color:var(--text-dim);line-height:1.8;">
+              ▸ 典型用例：<br>
+              <span style="color:var(--text);">- 读取文件</span><br>
+              <span style="color:var(--text);">- API 配置</span><br>
+              <span style="color:var(--text);">- 知识库内容</span>
+            </div>
+          </div>
+          <!-- Prompts -->
+          <div class="card card-green" style="padding:24px 20px;">
+            <div style="font-size:1.6rem;margin-bottom:8px;">🟢</div>
+            <div style="font-family:'Orbitron',sans-serif;font-size:1.3rem;font-weight:700;color:var(--green);margin-bottom:6px;">Prompts｜提示词</div>
+            <div class="badge badge-purple" style="margin-bottom:14px;">模板 · Reusable</div>
+            <div style="font-size:0.95rem;color:var(--text-dim);line-height:1.7;margin-bottom:14px;">
+              用户主动触发的提示模板，参数化、可复用。
+            </div>
+            <div style="font-size:0.9rem;color:var(--text-dim);line-height:1.8;">
+              ▸ 典型用例：<br>
+              <span style="color:var(--text);">- 代码评审</span><br>
+              <span style="color:var(--text);">- 报告生成</span><br>
+              <span style="color:var(--text);">- 翻译模板</span>
+            </div>
+          </div>
+        </div>
+        <div class="bottom-quote anim-up d4">
+          ✅ 实战中 Tools 用得最多
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 15: stdio 本地进程通信 ==================== -->
+    <div class="slide" data-idx="15">
+      <div style="width:100%;max-width:1600px;">
+        <div class="slide-header anim-up d1">
+          <h2><span class="cyan">stdio</span> · 本地进程通信</h2>
+        </div>
+        <div class="dual-col anim-in d2" style="margin-bottom:20px;">
+          <!-- 左侧示意 -->
+          <div class="col">
+            <div class="card card-cyan" style="padding:28px;">
+              <div style="font-size:1.2rem;font-weight:600;color:var(--cyan);margin-bottom:18px;">🖥️ 本地进程通信示意</div>
+              <div style="display:flex;flex-direction:column;gap:10px;font-size:1rem;line-height:1.8;">
+                <div style="padding:10px 16px;background:rgba(0,243,255,0.06);border-radius:8px;">
+                  ● <span style="color:var(--cyan);font-weight:600;">Claude Code</span> <span style="color:var(--text-dim);">（主进程 · 父进程）</span>
+                </div>
+                <div style="text-align:center;color:var(--gold);font-size:1.2rem;">↓ spawn 子进程</div>
+                <div style="text-align:center;font-family:'JetBrains Mono',monospace;font-size:0.9rem;color:var(--text-dim);">
+                  stdin / stdout / stderr
+                </div>
+                <div style="text-align:center;color:var(--gold);font-size:1.2rem;">↑ JSON-RPC 消息</div>
+                <div style="padding:10px 16px;background:rgba(0,243,255,0.06);border-radius:8px;">
+                  ● <span style="color:var(--cyan);font-weight:600;">MCP Server</span> <span style="color:var(--text-dim);">（本地子进程）</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- 右侧四大优势 -->
+          <div class="col" style="gap:14px;">
+            <div style="font-size:1.1rem;font-weight:600;color:var(--gold);margin-bottom:4px;">🌟 四大优势</div>
+            <div class="card card-green" style="display:flex;align-items:center;gap:16px;padding:16px 20px;">
+              <span style="font-size:1.4rem;">🏠</span>
+              <div><span style="font-weight:600;color:var(--green);">完全本地</span><br><span style="font-size:0.9rem;color:var(--text-dim);">进程级隔离 · 不暴露端口</span></div>
+            </div>
+            <div class="card card-cyan" style="display:flex;align-items:center;gap:16px;padding:16px 20px;">
+              <span style="font-size:1.4rem;">🌐</span>
+              <div><span style="font-weight:600;color:var(--cyan);">零网络</span><br><span style="font-size:0.9rem;color:var(--text-dim);">无 TCP/HTTPS · 不依赖网络栈</span></div>
+            </div>
+            <div class="card card-gold" style="display:flex;align-items:center;gap:16px;padding:16px 20px;">
+              <span style="font-size:1.4rem;">⚡</span>
+              <div><span style="font-weight:600;color:var(--gold);">最低延迟</span><br><span style="font-size:0.9rem;color:var(--text-dim);">毫秒级响应 · 管道直传</span></div>
+            </div>
+            <div class="card card-purple" style="display:flex;align-items:center;gap:16px;padding:16px 20px;">
+              <span style="font-size:1.4rem;">🛡️</span>
+              <div><span style="font-weight:600;color:var(--purple);">最高安全</span><br><span style="font-size:0.9rem;color:var(--text-dim);">本地凭证 · 不出主机</span></div>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;gap:12px;justify-content:center;" class="anim-up d3">
+          <span class="pill pill-cyan">本地文件系统</span>
+          <span class="pill pill-cyan">SQLite / Git</span>
+          <span class="pill pill-cyan">本地开发工具</span>
+          <span class="pill pill-cyan">CLI 包装</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 16: HTTP 远程服务器 ==================== -->
+    <div class="slide" data-idx="16">
+      <div style="width:100%;max-width:1600px;">
+        <div class="slide-header anim-up d1">
+          <h2><span class="gold">HTTP</span> · 远程服务器推荐方案</h2>
+        </div>
+        <div class="dual-col anim-in d2" style="margin-bottom:18px;">
+          <!-- 左侧流程 -->
+          <div class="col">
+            <div class="card card-gold" style="padding:28px;">
+              <div style="font-size:1.2rem;font-weight:600;color:var(--gold);margin-bottom:18px;">🌐 远程通信流程</div>
+              <div style="display:flex;flex-direction:column;gap:10px;font-size:1rem;line-height:1.8;">
+                <div style="padding:10px 16px;background:rgba(255,215,0,0.06);border-radius:8px;">
+                  ● <span style="color:var(--gold);font-weight:600;">Claude Code</span> <span style="color:var(--text-dim);">（客户端）</span>
+                </div>
+                <div style="text-align:center;color:var(--gold);font-size:1.2rem;">↓ POST /mcp</div>
+                <div style="text-align:center;font-family:'JetBrains Mono',monospace;font-size:0.85rem;color:var(--text-dim);">
+                  JSON-RPC over HTTPS + OAuth 2.0
+                </div>
+                <div style="text-align:center;color:var(--gold);font-size:1.2rem;">↑ Response</div>
+                <div style="padding:10px 16px;background:rgba(255,215,0,0.06);border-radius:8px;">
+                  ● <span style="color:var(--gold);font-weight:600;">远程 MCP Server</span> <span style="color:var(--text-dim);">（SaaS / 云函数 / K8s）</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- 右侧特性 -->
+          <div class="col" style="gap:14px;">
+            <div style="font-size:1.1rem;font-weight:600;color:var(--green);margin-bottom:4px;">✅ 推荐特性</div>
+            <div class="card card-cyan" style="display:flex;align-items:center;gap:16px;padding:16px 20px;">
+              <span style="font-size:1.4rem;">🌍</span>
+              <div><span style="font-weight:600;color:var(--cyan);">跨网络</span><br><span style="font-size:0.9rem;color:var(--text-dim);">公网/内网均可 · 无地域限制</span></div>
+            </div>
+            <div class="card card-gold" style="display:flex;align-items:center;gap:16px;padding:16px 20px;">
+              <span style="font-size:1.4rem;">🔐</span>
+              <div><span style="font-weight:600;color:var(--gold);">OAuth 2.0</span><br><span style="font-size:0.9rem;color:var(--text-dim);">标准授权流 · Token 安全</span></div>
+            </div>
+            <div class="card card-purple" style="display:flex;align-items:center;gap:16px;padding:16px 20px;">
+              <span style="font-size:1.4rem;">💼</span>
+              <div><span style="font-weight:600;color:var(--purple);">企业集成</span><br><span style="font-size:0.9rem;color:var(--text-dim);">SSO/审计兼容 · 合规友好</span></div>
+            </div>
+            <div class="card card-green" style="display:flex;align-items:center;gap:16px;padding:16px 20px;">
+              <span style="font-size:1.4rem;">🚀</span>
+              <div><span style="font-weight:600;color:var(--green);">易部署</span><br><span style="font-size:0.9rem;color:var(--text-dim);">复用现有 HTTP 基础设施</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="alert-box alert-red anim-up d3" style="max-width:1600px;justify-content:center;">
+          <span style="font-size:1.2rem;">⊘</span>
+          <div style="font-size:0.95rem;">SSE 传输已废弃 · 旧版本兼容已移除 → 请统一使用 <span style="font-weight:600;">HTTP / stdio</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 17: 如何选择传输方式 ==================== -->
+    <div class="slide" data-idx="17">
+      <div style="width:100%;max-width:1600px;">
+        <div class="slide-header anim-up d1">
+          <h2>如何选择<span class="gold">传输方式</span>？</h2>
+        </div>
+        <div class="dual-col anim-in d2" style="margin-bottom:24px;">
+          <div class="col">
+            <div class="card card-cyan" style="padding:32px 28px;text-align:center;">
+              <div style="font-size:2.2rem;margin-bottom:12px;">💻</div>
+              <div style="font-family:'Orbitron',sans-serif;font-size:1.6rem;font-weight:700;color:var(--cyan);margin-bottom:18px;">本地 → stdio</div>
+              <div class="bullet-item" style="justify-content:center;"><div class="bullet-dot cyan"></div>本地进程间通信</div>
+              <div class="bullet-item" style="justify-content:center;"><div class="bullet-dot cyan"></div>零网络延迟</div>
+              <div class="bullet-item" style="justify-content:center;"><div class="bullet-dot cyan"></div>进程隔离安全</div>
+              <div style="margin-top:18px;padding:12px 18px;background:rgba(0,243,255,0.06);border-radius:8px;font-size:0.9rem;color:var(--cyan);">
+                → 适用：文件系统 / 本地数据库 / CLI 工具
+              </div>
+            </div>
+          </div>
+          <div class="col">
+            <div class="card card-gold" style="padding:32px 28px;text-align:center;">
+              <div style="font-size:2.2rem;margin-bottom:12px;">☁️</div>
+              <div style="font-family:'Orbitron',sans-serif;font-size:1.6rem;font-weight:700;color:var(--gold);margin-bottom:18px;">远程 → HTTP</div>
+              <div class="bullet-item" style="justify-content:center;"><div class="bullet-dot gold"></div>跨网络服务调用</div>
+              <div class="bullet-item" style="justify-content:center;"><div class="bullet-dot gold"></div>多客户端共享</div>
+              <div class="bullet-item" style="justify-content:center;"><div class="bullet-dot gold"></div>标准 RESTful 协议</div>
+              <div style="margin-top:18px;padding:12px 18px;background:rgba(255,215,0,0.06);border-radius:8px;font-size:0.9rem;color:var(--gold);">
+                → 适用：云端 API / SaaS 平台 / 企业内部服务
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="bottom-quote anim-up d4">
+          📌 决策准则：本地 stdio · 远程 HTTP
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 18: 环境变量替换机制 ==================== -->
+    <div class="slide" data-idx="18">
+      <div style="width:100%;max-width:1600px;">
+        <div class="slide-header anim-up d1">
+          <h2><span class="gold">环境变量</span>替换机制</h2>
+        </div>
+        <div class="dual-col anim-in d2">
+          <div class="col">
+            <div class="card" style="border-color:rgba(0,200,120,0.3);padding:24px;">
+              <div style="font-size:1.1rem;font-weight:600;color:var(--green);margin-bottom:14px;">⚙️ .mcp.json 配置示例</div>
+              <div class="code-block" style="border-color:rgba(0,200,120,0.2);font-size:0.85rem;line-height:1.75;padding:18px 20px;">
+{
+  <span class="hl-gold">"mcpServers"</span>: {
+    <span style="color:var(--green);">"postgres"</span>: {
+      <span class="hl-cyan">"command"</span>: <span style="color:var(--green);">"npx"</span>,
+      <span class="hl-purple">"env"</span>: {
+        <span class="hl-gold">"API_KEY"</span>: <span style="color:var(--green);">"${API_KEY}"</span>,
+        <span class="hl-cyan">"DB_HOST"</span>: <span style="color:var(--green);">"${DB_HOST:-local}"</span>
+      }
+    }
+  }
+}</div>
+            </div>
+          </div>
+          <div class="col" style="gap:16px;">
+            <div style="font-size:1.1rem;font-weight:600;color:var(--gold);margin-bottom:4px;">📌 四种机制</div>
+            <div class="card card-gold" style="display:flex;align-items:center;gap:16px;padding:16px 20px;">
+              <span style="font-size:1.4rem;">🔄</span>
+              <div><span style="font-family:'JetBrains Mono',monospace;color:var(--gold);font-weight:600;">${VAR_NAME}</span><br><span style="font-size:0.9rem;color:var(--text-dim);">运行时动态替换</span></div>
+            </div>
+            <div class="card card-cyan" style="display:flex;align-items:center;gap:16px;padding:16px 20px;">
+              <span style="font-size:1.4rem;">⏱️</span>
+              <div><span style="font-family:'JetBrains Mono',monospace;color:var(--cyan);font-weight:600;">${VAR:-default}</span><br><span style="font-size:0.9rem;color:var(--text-dim);">提供回退默认值</span></div>
+            </div>
+            <div class="card card-purple" style="display:flex;align-items:center;gap:16px;padding:16px 20px;">
+              <span style="font-size:1.4rem;">🔒</span>
+              <div><span style="font-weight:600;color:var(--purple);">敏感数据隔离</span><br><span style="font-size:0.9rem;color:var(--text-dim);">保存于本地 .env</span></div>
+            </div>
+            <div class="card card-green" style="display:flex;align-items:center;gap:16px;padding:16px 20px;">
+              <span style="font-size:1.4rem;">✅</span>
+              <div><span style="font-weight:600;color:var(--green);">安全提交 Git</span><br><span style="font-size:0.9rem;color:var(--text-dim);">配置不含明文密钥</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 19: 配置文件作用域 ==================== -->
+    <div class="slide" data-idx="19">
+      <div style="width:100%;max-width:1600px;">
+        <div class="slide-header anim-up d1">
+          <h2>配置文件<span class="gold">作用域</span></h2>
+          <div class="sub">位置决定生效范围</div>
+        </div>
+        <div class="dual-col anim-in d2">
+          <div class="col">
+            <div class="card card-cyan" style="padding:32px 28px;">
+              <div style="font-size:2rem;margin-bottom:12px;">📁</div>
+              <div style="font-family:'Orbitron',sans-serif;font-size:1.5rem;font-weight:700;color:var(--cyan);margin-bottom:6px;">项目级</div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:0.9rem;color:var(--text-dim);margin-bottom:18px;padding:8px 14px;background:rgba(0,243,255,0.06);border-radius:6px;">./.mcp.json</div>
+              <div class="bullet-item"><div class="bullet-dot cyan"></div>仅当前项目生效</div>
+              <div class="bullet-item"><div class="bullet-dot cyan"></div>随仓库提交共享</div>
+              <div class="bullet-item"><div class="bullet-dot cyan"></div>团队配置统一</div>
+              <div style="margin-top:16px;padding:12px 18px;background:rgba(0,243,255,0.06);border-radius:8px;font-size:0.9rem;color:var(--cyan);">
+                → 典型场景：业务数据库、专属 API
+              </div>
+            </div>
+          </div>
+          <div class="col">
+            <div class="card card-gold" style="padding:32px 28px;">
+              <div style="font-size:2rem;margin-bottom:12px;">🏠</div>
+              <div style="font-family:'Orbitron',sans-serif;font-size:1.5rem;font-weight:700;color:var(--gold);margin-bottom:6px;">用户级</div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:0.9rem;color:var(--text-dim);margin-bottom:18px;padding:8px 14px;background:rgba(255,215,0,0.06);border-radius:6px;">~/.claude/.mcp.json</div>
+              <div class="bullet-item"><div class="bullet-dot gold"></div>对所有项目生效</div>
+              <div class="bullet-item"><div class="bullet-dot gold"></div>个人偏好沉淀</div>
+              <div class="bullet-item"><div class="bullet-dot gold"></div>跨项目复用</div>
+              <div style="margin-top:16px;padding:12px 18px;background:rgba(255,215,0,0.06);border-radius:8px;font-size:0.9rem;color:var(--gold);">
+                → 典型场景：通用搜索、笔记工具
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 20: 数据库查询实战 ==================== -->
+    <div class="slide" data-idx="20">
+      <div style="width:100%;max-width:1600px;">
+        <div class="slide-header anim-up d1">
+          <h2>数据库查询<span class="gold">实战</span></h2>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:16px;width:100%;max-width:1600px;margin-bottom:24px;" class="anim-in d2">
+          <!-- Step 1 -->
+          <div class="card card-cyan" style="flex:1;text-align:center;padding:20px 14px;">
+            <div style="font-size:1.8rem;margin-bottom:8px;">💬</div>
+            <div style="font-size:0.85rem;color:var(--cyan);font-weight:600;margin-bottom:6px;">1. 用户提问</div>
+            <div style="font-size:0.8rem;color:var(--text-dim);line-height:1.5;">"帮我查下订单..."</div>
+          </div>
+          <div style="display:flex;align-items:center;font-size:1.4rem;color:var(--gold);padding-top:30px;">→</div>
+          <!-- Step 2 -->
+          <div class="card card-purple" style="flex:1;text-align:center;padding:20px 14px;">
+            <div style="font-size:1.8rem;margin-bottom:8px;">🔍</div>
+            <div style="font-size:0.85rem;color:var(--purple);font-weight:600;margin-bottom:6px;">2. 识别</div>
+            <div style="font-size:0.8rem;color:var(--text-dim);line-height:1.5;">postgres 服务</div>
+          </div>
+          <div style="display:flex;align-items:center;font-size:1.4rem;color:var(--gold);padding-top:30px;">→</div>
+          <!-- Step 3 -->
+          <div class="card card-gold" style="flex:1;text-align:center;padding:20px 14px;">
+            <div style="font-size:1.8rem;margin-bottom:8px;">📜</div>
+            <div style="font-size:0.85rem;color:var(--gold);font-weight:600;margin-bottom:6px;">3. SQL</div>
+            <div style="font-size:0.8rem;color:var(--text-dim);line-height:1.5;">SELECT * FROM ...</div>
+          </div>
+          <div style="display:flex;align-items:center;font-size:1.4rem;color:var(--gold);padding-top:30px;">→</div>
+          <!-- Step 4 -->
+          <div class="card card-green" style="flex:1;text-align:center;padding:20px 14px;">
+            <div style="font-size:1.8rem;margin-bottom:8px;">🗃️</div>
+            <div style="font-size:0.85rem;color:var(--green);font-weight:600;margin-bottom:6px;">4. 执行</div>
+            <div style="font-size:0.8rem;color:var(--text-dim);line-height:1.5;">数据库返回</div>
+          </div>
+          <div style="display:flex;align-items:center;font-size:1.4rem;color:var(--gold);padding-top:30px;">→</div>
+          <!-- Step 5 -->
+          <div class="card card-red" style="flex:1;text-align:center;padding:20px 14px;">
+            <div style="font-size:1.8rem;margin-bottom:8px;">✅</div>
+            <div style="font-size:0.85rem;color:var(--red);font-weight:600;margin-bottom:6px;">5. 结果</div>
+            <div style="font-size:0.8rem;color:var(--text-dim);line-height:1.5;">自然语言呈现</div>
+          </div>
+        </div>
+        <div class="bottom-quote anim-up d4" style="background:rgba(0,200,120,0.06);border-color:rgba(0,200,120,0.3);color:var(--green);">
+          ✨ 无需 SQL · 无需客户端
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 21: 关键安全原则 ==================== -->
+    <div class="slide" data-idx="21">
+      <div style="width:100%;max-width:1600px;">
+        <div class="slide-header anim-up d1">
+          <h2>⚠️ 关键安全原则</h2>
+          <div class="sub">数据库连接必须只读</div>
+        </div>
+        <div class="dual-col anim-in d2" style="margin-bottom:22px;">
+          <div class="col">
+            <div class="card card-red" style="padding:28px;">
+              <div style="font-size:1.3rem;font-weight:600;color:var(--red);margin-bottom:14px;">🚫 危险：读写账号</div>
+              <div style="font-size:0.95rem;color:var(--text-dim);margin-bottom:14px;">Claude 理论上能执行：</div>
+              <div class="code-block" style="border-color:rgba(255,77,77,0.3);font-size:0.85rem;padding:14px 18px;margin-bottom:14px;">
+<span class="hl-red">INSERT INTO</span> ...
+<span class="hl-red">UPDATE</span> table <span class="hl-red">SET</span> ...
+<span class="hl-red">DROP TABLE</span> users</div>
+              <div style="font-size:1rem;color:var(--red);font-weight:600;">→ 误操作 = 数据灾难</div>
+            </div>
+          </div>
+          <div class="col">
+            <div class="card card-green" style="padding:28px;">
+              <div style="font-size:1.3rem;font-weight:600;color:var(--green);margin-bottom:14px;">🛡️ 安全：只读账号</div>
+              <div style="font-size:0.95rem;color:var(--text-dim);margin-bottom:14px;">仅允许查询动作：</div>
+              <div class="code-block" style="border-color:rgba(0,200,120,0.3);font-size:0.85rem;padding:14px 18px;margin-bottom:14px;">
+<span class="hl-green">SELECT</span> col <span class="hl-green">FROM</span> ...
+<span class="hl-green">WHERE</span> / <span class="hl-green">GROUP BY</span>
+<span class="hl-green">GRANT SELECT ONLY</span></div>
+              <div style="font-size:1rem;color:var(--green);font-weight:600;">→ 最小权限原则</div>
+            </div>
+          </div>
+        </div>
+        <div class="bottom-quote anim-up d4">
+          📌 Read-Only User = 最基本防护
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 22: 自定义 MCP 服务器 ==================== -->
+    <div class="slide" data-idx="22">
+      <div style="width:100%;max-width:1600px;">
+        <div class="slide-header anim-up d1">
+          <h2>自定义 <span class="gold">MCP 服务器</span></h2>
+          <div class="sub">TypeScript / Python SDK</div>
+        </div>
+        <div class="dual-col anim-in d2">
+          <div class="col">
+            <div class="card" style="border-color:rgba(0,243,255,0.2);padding:24px;">
+              <div style="font-size:1.1rem;font-weight:600;color:var(--cyan);margin-bottom:14px;">💻 TypeScript SDK 示例</div>
+              <div class="code-block" style="font-size:0.82rem;line-height:1.75;padding:18px 20px;">
+<span class="hl-magenta">import</span> { McpServer } <span class="hl-magenta">from</span> <span style="color:var(--green);">'@mcp/sdk'</span>;
+
+<span class="hl-magenta">const</span> server = <span class="hl-magenta">new</span> <span class="hl-cyan">McpServer</span>({
+  <span class="hl-gold">name</span>: <span style="color:var(--green);">'weather-tool'</span>
+});
+
+server.<span class="hl-cyan">tool</span>(<span style="color:var(--green);">'get_weather'</span>, {
+  <span class="hl-gold">description</span>: <span style="color:var(--green);">'查询城市天气'</span>,
+  <span class="hl-purple">handler</span>: <span class="hl-magenta">async</span> ({ city }) => {
+    <span class="hl-magenta">return await</span> <span class="hl-cyan">fetchWeather</span>(city);
+  }
+});
+
+server.<span class="hl-cyan">listen</span>();</div>
+            </div>
+          </div>
+          <div class="col" style="gap:16px;">
+            <div style="font-size:1.1rem;font-weight:600;color:var(--gold);margin-bottom:4px;">📌 四步开发流程</div>
+            <div class="card card-gold" style="display:flex;gap:16px;align-items:flex-start;padding:18px 20px;">
+              <span style="font-family:'Orbitron',sans-serif;font-size:1.4rem;font-weight:700;color:var(--gold);min-width:32px;">1</span>
+              <div><span style="font-weight:600;color:var(--text);">创建服务器实例</span><br><span style="font-family:'JetBrains Mono',monospace;font-size:0.85rem;color:var(--text-dim);">new McpServer(config)</span></div>
+            </div>
+            <div class="card card-cyan" style="display:flex;gap:16px;align-items:flex-start;padding:18px 20px;">
+              <span style="font-family:'Orbitron',sans-serif;font-size:1.4rem;font-weight:700;color:var(--cyan);min-width:32px;">2</span>
+              <div><span style="font-weight:600;color:var(--text);">定义工具</span><br><span style="font-family:'JetBrains Mono',monospace;font-size:0.85rem;color:var(--text-dim);">server.tool(name, handler)</span></div>
+            </div>
+            <div class="card card-purple" style="display:flex;gap:16px;align-items:flex-start;padding:18px 20px;">
+              <span style="font-family:'Orbitron',sans-serif;font-size:1.4rem;font-weight:700;color:var(--purple);min-width:32px;">3</span>
+              <div><span style="font-weight:600;color:var(--text);">处理请求</span><br><span style="font-family:'JetBrains Mono',monospace;font-size:0.85rem;color:var(--text-dim);">async handler 内业务逻辑</span></div>
+            </div>
+            <div class="card card-green" style="display:flex;gap:16px;align-items:flex-start;padding:18px 20px;">
+              <span style="font-family:'Orbitron',sans-serif;font-size:1.4rem;font-weight:700;color:var(--green);min-width:32px;">4</span>
+              <div><span style="font-weight:600;color:var(--text);">返回结果</span><br><span style="font-family:'JetBrains Mono',monospace;font-size:0.85rem;color:var(--text-dim);">return data / throw error</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 23: 工具设计的关键细节 ==================== -->
+    <div class="slide" data-idx="23">
+      <div style="width:100%;max-width:1600px;">
+        <div class="slide-header anim-up d1">
+          <h2>工具设计的<span class="gold">关键细节</span></h2>
+        </div>
+        <div class="anim-in d2" style="margin-bottom:24px;">
+          <div class="card card-gold" style="max-width:1600px;text-align:center;padding:22px 28px;margin-bottom:24px;">
+            <div style="font-size:1.2rem;font-weight:600;color:var(--gold);margin-bottom:6px;">📖 Tool Description</div>
+            <div style="font-size:1rem;color:var(--text-dim);">是 Claude 判断何时调用的核心依据</div>
+          </div>
+          <div class="grid-3">
+            <div class="card card-cyan" style="text-align:center;padding:24px 20px;">
+              <div style="font-size:1.8rem;margin-bottom:10px;">✅</div>
+              <div style="font-family:'Orbitron',sans-serif;font-size:1.1rem;font-weight:700;color:var(--cyan);margin-bottom:8px;">类型安全</div>
+              <div style="font-size:0.95rem;color:var(--text-dim);line-height:1.6;">TS 类型 / Pydantic Schema</div>
+            </div>
+            <div class="card card-purple" style="text-align:center;padding:24px 20px;">
+              <div style="font-size:1.8rem;margin-bottom:10px;">🛡️</div>
+              <div style="font-family:'Orbitron',sans-serif;font-size:1.1rem;font-weight:700;color:var(--purple);margin-bottom:8px;">参数校验</div>
+              <div style="font-size:0.95rem;color:var(--text-dim);line-height:1.6;">边界值 · 注入防护</div>
+            </div>
+            <div class="card card-green" style="text-align:center;padding:24px 20px;">
+              <div style="font-size:1.8rem;margin-bottom:10px;">📄</div>
+              <div style="font-family:'Orbitron',sans-serif;font-size:1.1rem;font-weight:700;color:var(--green);margin-bottom:8px;">日志规范</div>
+              <div style="font-size:0.95rem;color:var(--text-dim);line-height:1.6;">结构化输出 · 追踪 ID</div>
+            </div>
+          </div>
+        </div>
+        <div class="bottom-quote anim-up d4">
+          ⚙️ 设计逻辑链：描述 → 意图识别 → 调用决策
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 24: MCP 服务器生态 ==================== -->
+    <div class="slide" data-idx="24">
+      <div style="width:100%;max-width:1600px;">
+        <div class="slide-header anim-up d1">
+          <div class="pill pill-gold" style="margin-bottom:12px;">[ MCP 服务器生态 ]</div>
+          <h2>官方与<span class="gold">社区生态</span></h2>
+          <div class="sub">Anthropic 即用服务器 + 社区繁荣的第三方集成</div>
+        </div>
+        <div class="dual-col anim-in d2">
+          <!-- 官方 -->
+          <div class="col">
+            <div class="card card-gold" style="padding:24px;">
+              <div style="font-size:1.2rem;font-weight:600;color:var(--gold);margin-bottom:18px;">◎ Anthropic 官方服务器</div>
+              <div class="bullet-item"><span style="font-size:1.3rem;margin-right:8px;">📁</span><div><span style="font-weight:600;color:var(--text);">filesystem</span><br><span style="font-size:0.9rem;color:var(--text-dim);">文件读写 · 目录遍历</span></div></div>
+              <div class="bullet-item"><span style="font-size:1.3rem;margin-right:8px;">🌐</span><div><span style="font-weight:600;color:var(--text);">fetch</span><br><span style="font-size:0.9rem;color:var(--text-dim);">HTTP 请求 · 网页抓取</span></div></div>
+              <div class="bullet-item"><span style="font-size:1.3rem;margin-right:8px;">🗃️</span><div><span style="font-weight:600;color:var(--text);">postgres</span><br><span style="font-size:0.9rem;color:var(--text-dim);">数据库查询 · SQL 执行</span></div></div>
+              <div class="bullet-item"><span style="font-size:1.3rem;margin-right:8px;">💾</span><div><span style="font-weight:600;color:var(--text);">memory</span><br><span style="font-size:0.9rem;color:var(--text-dim);">跨会话持久存储</span></div></div>
+              <div class="bullet-item"><span style="font-size:1.3rem;margin-right:8px;">🐙</span><div><span style="font-weight:600;color:var(--text);">git</span><br><span style="font-size:0.9rem;color:var(--text-dim);">版本控制 · 分支 · 提交 · 合并</span></div></div>
+            </div>
+          </div>
+          <!-- 社区 -->
+          <div class="col">
+            <div class="card card-purple" style="padding:24px;">
+              <div style="font-size:1.2rem;font-weight:600;color:var(--purple);margin-bottom:18px;">👥 社区第三方服务器</div>
+              <div class="bullet-item"><span style="font-size:1.3rem;margin-right:8px;">🌐</span><div><span style="font-weight:600;color:var(--text);">GitHub</span><br><span style="font-size:0.9rem;color:var(--text-dim);">代码托管与协作</span></div></div>
+              <div class="bullet-item"><span style="font-size:1.3rem;margin-right:8px;">📝</span><div><span style="font-weight:600;color:var(--text);">Notion</span><br><span style="font-size:0.9rem;color:var(--text-dim);">知识库与文档</span></div></div>
+              <div class="bullet-item"><span style="font-size:1.3rem;margin-right:8px;">⚠️</span><div><span style="font-weight:600;color:var(--text);">Sentry</span><br><span style="font-size:0.9rem;color:var(--text-dim);">错误监控与告警</span></div></div>
+              <div class="bullet-item"><span style="font-size:1.3rem;margin-right:8px;">💬</span><div><span style="font-weight:600;color:var(--text);">Slack</span><br><span style="font-size:0.9rem;color:var(--text-dim);">消息通知与自动化</span></div></div>
+              <div style="margin-top:14px;font-size:0.9rem;color:var(--text-dim);opacity:0.7;">→ 更多 100+ 社区服务器持续涌现...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 25: 全栈开发者的 MCP 工具箱 ==================== -->
+    <div class="slide" data-idx="25">
+      <div style="width:100%;max-width:1600px;">
+        <div class="slide-header anim-up d1">
+          <div class="pill pill-gold" style="margin-bottom:12px;">[ 全栈集成 ]</div>
+          <h2>全栈开发者的 <span class="gold">MCP 工具箱</span></h2>
+          <div class="sub">单个 Claude 会话 · 无缝完成复杂工作流</div>
+        </div>
+        <div class="anim-in d2" style="margin-bottom:22px;">
+          <!-- 中心枢纽 -->
+          <div style="text-align:center;margin-bottom:24px;">
+            <span style="font-family:'Orbitron',sans-serif;font-size:1.6rem;font-weight:700;color:var(--gold);text-shadow:0 0 14px var(--gold-glow);background:rgba(255,215,0,0.08);padding:14px 36px;border-radius:50%;border:2px solid rgba(255,215,0,0.3);display:inline-block;">🎯 Claude 统一调度</span>
+          </div>
+          <!-- 四大能力域 -->
+          <div class="grid-2" style="max-width:1200px;margin:0 auto;">
+            <div class="card card-cyan" style="display:flex;align-items:center;gap:18px;padding:20px 24px;">
+              <span style="font-size:2rem;">📁</span>
+              <div><span style="font-weight:600;color:var(--cyan);">文件系统</span><br><span style="font-size:0.9rem;color:var(--text-dim);">读写源码 · 操作日志 · 文档检索</span></div>
+            </div>
+            <div class="card card-purple" style="display:flex;align-items:center;gap:18px;padding:20px 24px;">
+              <span style="font-size:2rem;">🐙</span>
+              <div><span style="font-weight:600;color:var(--purple);">代码协作</span><br><span style="font-size:0.9rem;color:var(--text-dim);">Git 分支 · PR 评审 · Issue 跟踪</span></div>
+            </div>
+            <div class="card card-gold" style="display:flex;align-items:center;gap:18px;padding:20px 24px;">
+              <span style="font-size:2rem;">🌐</span>
+              <div><span style="font-weight:600;color:var(--gold);">网络请求</span><br><span style="font-size:0.9rem;color:var(--text-dim);">HTTP 抓取 · API 调用 · 数据获取</span></div>
+            </div>
+            <div class="card card-green" style="display:flex;align-items:center;gap:18px;padding:20px 24px;">
+              <span style="font-size:2rem;">🗃️</span>
+              <div><span style="font-weight:600;color:var(--green);">数据库管理</span><br><span style="font-size:0.9rem;color:var(--text-dim);">SQL 查询 · 数据迁移 · Schema 检查</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="alert-box alert-gold anim-up d3" style="max-width:1600px;justify-content:center;">
+          <span style="font-size:1.2rem;">🔄</span>
+          <div>过去：多工具来回切换 → <span style="font-weight:600;color:var(--green);">现在：Claude 统一调度 MCP</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 26: 安全的三重防御 ==================== -->
+    <div class="slide" data-idx="26">
+      <div style="width:100%;max-width:1600px;">
+        <div class="slide-header anim-up d1">
+          <div class="pill pill-gold" style="margin-bottom:12px;">[ 安全机制 ]</div>
+          <h2>安全的<span class="gold">三重防御</span></h2>
+          <div class="sub">扩展能力边界 · 也守住信任底线</div>
+        </div>
+        <div class="grid-3 anim-in d2">
+          <!-- Layer 1 -->
+          <div class="layer-card" style="border-color:rgba(0,243,255,0.3);">
+            <div class="layer-num" style="color:var(--cyan);">🛡️ Layer 1</div>
+            <div style="font-size:1.2rem;font-weight:600;color:var(--cyan);margin-bottom:12px;">交互式审批</div>
+            <div style="font-size:0.95rem;color:var(--text-dim);line-height:1.7;margin-bottom:14px;">
+              • 首次连接服务器时，用户交互确认<br>
+              • 建立信任基石
+            </div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:0.8rem;color:var(--text-dim);padding:10px 14px;background:rgba(0,243,255,0.06);border-radius:8px;line-height:1.6;">
+              $ claude mcp add<br>
+              → "你信任此服务器吗？[y/N]"
+            </div>
+          </div>
+          <!-- Layer 2 -->
+          <div class="layer-card" style="border-color:rgba(255,215,0,0.3);">
+            <div class="layer-num" style="color:var(--gold);">🛡️ Layer 2</div>
+            <div style="font-size:1.2rem;font-weight:600;color:var(--gold);margin-bottom:12px;">工具级权限</div>
+            <div style="font-size:0.95rem;color:var(--text-dim);line-height:1.7;margin-bottom:14px;">
+              • 细粒度控制每个工具的调用权限<br>
+              • 敏感操作需二次确认
+            </div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:0.8rem;color:var(--text-dim);padding:10px 14px;background:rgba(255,215,0,0.06);border-radius:8px;line-height:1.6;">
+              tool: postgres.query<br>
+              → "允许执行 SQL? [y/N]"
+            </div>
+          </div>
+          <!-- Layer 3 -->
+          <div class="layer-card" style="border-color:rgba(0,200,120,0.3);">
+            <div class="layer-num" style="color:var(--green);">🛡️ Layer 3</div>
+            <div style="font-size:1.2rem;font-weight:600;color:var(--green);margin-bottom:12px;">OAuth 2.0</div>
+            <div style="font-size:0.95rem;color:var(--text-dim);line-height:1.7;margin-bottom:14px;">
+              • 动态认证替代静态密钥<br>
+              • 令牌可撤销 · 范围最小化
+            </div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:0.8rem;color:var(--text-dim);padding:10px 14px;background:rgba(0,200,120,0.06);border-radius:8px;line-height:1.6;">
+              OAuth flow → token<br>
+              → 短时效 / 自动刷新 / 可撤销
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 27: 三类安全风险与防护 ==================== -->
+    <div class="slide" data-idx="27">
+      <div style="width:100%;max-width:1600px;">
+        <div class="slide-header anim-up d1">
+          <div class="pill pill-red" style="margin-bottom:12px;">[ 风险与防护 ]</div>
+          <h2>三类安全<span style="color:var(--red);">风险</span>与<span class="gold">防护</span></h2>
+          <div class="sub">研究人员揭示 · 防护可执行</div>
+        </div>
+        <div class="grid-3 anim-in d2">
+          <!-- 风险1 -->
+          <div style="display:flex;flex-direction:column;gap:14px;">
+            <div class="card card-red" style="flex:1;padding:22px 20px;">
+              <div style="font-size:1.8rem;margin-bottom:10px;">🚫</div>
+              <div style="font-size:1.1rem;font-weight:600;color:var(--red);margin-bottom:10px;">提示注入攻击</div>
+              <div style="font-size:0.9rem;color:var(--text-dim);line-height:1.7;">恶意内容通过 MCP 数据流注入上下文，诱导非预期操作</div>
+            </div>
+            <div class="card card-green" style="padding:16px 20px;">
+              <div style="font-size:0.85rem;font-weight:600;color:var(--green);margin-bottom:6px;">✅ 防护策略</div>
+              <div style="font-size:0.85rem;color:var(--text-dim);line-height:1.6;">仅安装官方与知名社区服务器，警惕未审计来源</div>
+            </div>
+          </div>
+          <!-- 风险2 -->
+          <div style="display:flex;flex-direction:column;gap:14px;">
+            <div class="card card-red" style="flex:1;padding:22px 20px;">
+              <div style="font-size:1.8rem;margin-bottom:10px;">⚠️</div>
+              <div style="font-size:1.1rem;font-weight:600;color:var(--red);margin-bottom:10px;">工具权限滥用</div>
+              <div style="font-size:0.9rem;color:var(--text-dim);line-height:1.7;">多工具组合调用 → 读 + 写 + 网络 = 敏感数据泄露</div>
+            </div>
+            <div class="card card-green" style="padding:16px 20px;">
+              <div style="font-size:0.85rem;font-weight:600;color:var(--green);margin-bottom:6px;">✅ 防护策略</div>
+              <div style="font-size:0.85rem;color:var(--text-dim);line-height:1.6;">数据库只读账号 · 最小权限原则 · 禁用危险操作</div>
+            </div>
+          </div>
+          <!-- 风险3 -->
+          <div style="display:flex;flex-direction:column;gap:14px;">
+            <div class="card card-red" style="flex:1;padding:22px 20px;">
+              <div style="font-size:1.8rem;margin-bottom:10px;">👤</div>
+              <div style="font-size:1.1rem;font-weight:600;color:var(--red);margin-bottom:10px;">冒名顶替</div>
+              <div style="font-size:0.9rem;color:var(--text-dim);line-height:1.7;">恶意服务器伪装合法工具，骗取密钥或执行有害命令</div>
+            </div>
+            <div class="card card-green" style="padding:16px 20px;">
+              <div style="font-size:0.85rem;font-weight:600;color:var(--green);margin-bottom:6px;">✅ 防护策略</div>
+              <div style="font-size:0.85rem;color:var(--text-dim);line-height:1.6;">API 密钥 via 环境变量 · 不写入代码 · 不外传配置</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 28: MCP × Skills 完美协作 ==================== -->
+    <div class="slide" data-idx="28">
+      <div style="width:100%;max-width:1600px;">
+        <div class="slide-header anim-up d1">
+          <div class="pill pill-gold" style="margin-bottom:12px;">[ 能力 × 策略 ]</div>
+          <h2><span class="gold">MCP</span> × <span class="cyan">Skills</span> 完美协作</h2>
+          <div class="sub">能力 × 策略 = 完整方案</div>
+        </div>
+        <div class="dual-col anim-in d2" style="margin-bottom:22px;">
+          <!-- MCP -->
+          <div class="col">
+            <div class="card card-gold" style="padding:28px;">
+              <div style="font-size:1.3rem;font-weight:600;color:var(--gold);margin-bottom:16px;">🍳 MCP｜专业厨房 · 能力</div>
+              <div class="bullet-item"><div class="bullet-dot gold"></div><span style="font-weight:500;">冰箱 · 数据库</span> <span style="color:var(--text-dim);font-size:0.9rem;">｜存储能力</span></div>
+              <div class="bullet-item"><div class="bullet-dot gold"></div><span style="font-weight:500;">炉灶 · 执行</span> <span style="color:var(--text-dim);font-size:0.9rem;">｜计算能力</span></div>
+              <div class="bullet-item"><div class="bullet-dot gold"></div><span style="font-weight:500;">食材 · 文件</span> <span style="color:var(--text-dim);font-size:0.9rem;">｜数据输入</span></div>
+              <div class="bullet-item"><div class="bullet-dot gold"></div><span style="font-weight:500;">刀具 · API</span> <span style="color:var(--text-dim);font-size:0.9rem;">｜接口能力</span></div>
+            </div>
+          </div>
+          <!-- Skills -->
+          <div class="col">
+            <div class="card card-cyan" style="padding:28px;">
+              <div style="font-size:1.3rem;font-weight:600;color:var(--cyan);margin-bottom:16px;">📜 SKILLS｜标准菜谱 · 策略</div>
+              <div style="font-size:0.95rem;color:var(--text-dim);margin-bottom:14px;">指导 Claude 以最优策略运用能力：</div>
+              <div class="bullet-item"><span style="font-family:'Orbitron',sans-serif;font-weight:700;color:var(--cyan);min-width:24px;">1</span>规定食材｜哪些工具可用</div>
+              <div class="bullet-item"><span style="font-family:'Orbitron',sans-serif;font-weight:700;color:var(--cyan);min-width:24px;">2</span>规定步骤｜调用顺序</div>
+              <div class="bullet-item"><span style="font-family:'Orbitron',sans-serif;font-weight:700;color:var(--cyan);min-width:24px;">3</span>规定火候｜参数与节奏</div>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;justify-content:center;" class="anim-up d3">
+          <span class="pill pill-cyan">用户需求</span>
+          <span class="flow-arrow">→</span>
+          <span class="pill pill-gold">Skill 识别</span>
+          <span class="flow-arrow">→</span>
+          <span class="pill pill-purple">MCP 工具</span>
+          <span class="flow-arrow">→</span>
+          <span class="pill pill-green">输出结果</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 29: 企业级集中管理 ==================== -->
+    <div class="slide" data-idx="29">
+      <div style="width:100%;max-width:1600px;">
+        <div class="slide-header anim-up d1">
+          <div class="pill pill-gold" style="margin-bottom:12px;">[ 企业级部署 ]</div>
+          <h2>企业级<span class="gold">集中管理</span></h2>
+          <div class="sub">managed-mcp.json · 全组织一次性下发</div>
+        </div>
+        <div class="grid-3 anim-in d2">
+          <!-- 分散配置 -->
+          <div class="card card-red" style="padding:24px 20px;">
+            <div style="font-size:1.2rem;font-weight:600;color:var(--red);margin-bottom:16px;">❌ 分散配置</div>
+            <div class="bullet-item"><div class="bullet-dot red"></div>小李：自己装 filesystem</div>
+            <div class="bullet-item"><div class="bullet-dot red"></div>小王：忘配 GitHub Token</div>
+            <div class="bullet-item"><div class="bullet-dot red"></div>新人：不知道装哪个</div>
+            <div style="margin-top:14px;padding:10px 14px;background:rgba(255,77,77,0.08);border-radius:8px;font-size:0.9rem;color:var(--red);">
+              → 配置漂移 · 难以审计
+            </div>
+          </div>
+          <!-- 配置文件 -->
+          <div class="card card-gold" style="padding:24px 20px;">
+            <div style="font-size:1.2rem;font-weight:600;color:var(--gold);margin-bottom:16px;">⚙️ managed-mcp.json</div>
+            <div class="json-block" style="font-size:0.78rem;padding:14px 16px;line-height:1.7;">
+{
+  <span style="color:var(--gold);">"mcpServers"</span>: {
+    <span style="color:var(--green);">"github"</span>: { ... },
+    <span style="color:var(--green);">"postgres"</span>: { ... },
+    <span style="color:var(--green);">"filesystem"</span>: { ... }
+  },
+  <span style="color:var(--cyan);">"scope"</span>: <span style="color:var(--green);">"organization"</span>
+}</div>
+            <div style="margin-top:12px;font-size:0.85rem;color:var(--text-dim);">→ 下发到全员 · 自动生效</div>
+          </div>
+          <!-- 集中管理 -->
+          <div class="card card-green" style="padding:24px 20px;">
+            <div style="font-size:1.2rem;font-weight:600;color:var(--green);margin-bottom:16px;">✅ 集中管理</div>
+            <div class="bullet-item"><div class="bullet-dot green"></div>所有人 · 同一份预配置</div>
+            <div class="bullet-item"><div class="bullet-dot green"></div>新人 · 入职即就绪</div>
+            <div class="bullet-item"><div class="bullet-dot green"></div>凭据 · 集中管控更新</div>
+            <div style="margin-top:14px;padding:10px 14px;background:rgba(0,200,120,0.08);border-radius:8px;font-size:0.9rem;color:var(--green);">
+              → 统一基线 · 可审计
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;gap:12px;justify-content:center;margin-top:18px;" class="anim-up d3">
+          <span class="pill pill-green">开箱即用</span>
+          <span class="pill pill-green">零配置</span>
+          <span class="pill pill-green">统一审计</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 30: 调试与故障排除 ==================== -->
+    <div class="slide" data-idx="30">
+      <div style="width:100%;max-width:1600px;">
+        <div class="slide-header anim-up d1">
+          <div class="pill pill-gold" style="margin-bottom:12px;">[ 调试实战 ]</div>
+          <h2>调试与<span class="gold">故障排除</span></h2>
+          <div class="sub">常见问题速查 + Token 智能管理</div>
+        </div>
+        <div class="dual-col anim-in d2">
+          <!-- 常见问题 -->
+          <div class="col" style="gap:14px;">
+            <div style="font-size:1.1rem;font-weight:600;color:var(--red);margin-bottom:4px;">🔍 常见问题</div>
+            <div class="card card-red" style="padding:16px 20px;">
+              <div style="font-weight:600;color:var(--red);margin-bottom:4px;">▶ 启动失败</div>
+              <div style="font-size:0.9rem;color:var(--text-dim);">服务器进程无法拉起 · 检查 npx 路径与依赖</div>
+            </div>
+            <div class="card card-red" style="padding:16px 20px;">
+              <div style="font-weight:600;color:var(--red);margin-bottom:4px;">⏳ 连接超时</div>
+              <div style="font-size:0.9rem;color:var(--text-dim);">网络阻塞或代理 · 增加 timeout 或代理穿透</div>
+            </div>
+            <div class="card card-red" style="padding:16px 20px;">
+              <div style="font-weight:600;color:var(--red);margin-bottom:4px;">🔐 认证失败</div>
+              <div style="font-size:0.9rem;color:var(--text-dim);">Token 过期或权限不足 · 重新走 OAuth 流程</div>
+            </div>
+            <div class="card card-red" style="padding:16px 20px;">
+              <div style="font-weight:600;color:var(--red);margin-bottom:4px;">📈 输出截断</div>
+              <div style="font-size:0.9rem;color:var(--text-dim);">超过 Token 上限 · 调整环境变量或缩小查询范围</div>
+            </div>
+          </div>
+          <!-- Token 管理 -->
+          <div class="col" style="gap:16px;">
+            <div style="font-size:1.1rem;font-weight:600;color:var(--gold);margin-bottom:4px;">🤖 Token 智能管理</div>
+            <div class="card card-gold" style="padding:24px 20px;">
+              <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:0.85rem;color:var(--text-dim);">0</span>
+                <div style="flex:1;height:12px;background:rgba(255,255,255,0.08);border-radius:6px;overflow:hidden;position:relative;">
+                  <div style="position:absolute;left:0;top:0;height:100%;width:40%;background:linear-gradient(90deg,var(--green),var(--gold));border-radius:6px;"></div>
+                  <div style="position:absolute;left:40%;top:0;height:100%;width:20%;background:linear-gradient(90deg,var(--gold),var(--red));border-radius:0 6px 6px 0;"></div>
+                </div>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:0.85rem;color:var(--text-dim);">25K</span>
+              </div>
+              <div class="bullet-item"><div class="bullet-dot gold"></div><span style="color:var(--gold);font-weight:600;">&gt; 10,000 · 警告</span><br><span style="font-size:0.9rem;color:var(--text-dim);">提示输出过大 · 建议精简查询</span></div>
+              <div class="bullet-item"><div class="bullet-dot red"></div><span style="color:var(--red);font-weight:600;">&gt; 25,000 · 自动截断</span><br><span style="font-size:0.9rem;color:var(--text-dim);">防止上下文溢出 · 保护对话稳定</span></div>
+              <div style="margin-top:12px;font-family:'JetBrains Mono',monospace;font-size:0.8rem;color:var(--text-dim);padding:10px 14px;background:rgba(255,215,0,0.06);border-radius:8px;">
+                环境变量：MCP_TOOL_OUTPUT_MAX 可调上限
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 31: 下章预告 ==================== -->
+    <div class="slide" data-idx="31">
+      <div style="max-width:1600px;">
+        <div class="pill pill-gold anim-up d1" style="margin-bottom:24px;">[ 下章预告 ]</div>
+        <div class="slide-header anim-up d2">
+          <h2>Headless 模式与 <span class="gold">CI/CD 集成</span></h2>
+        </div>
+        <div class="card card-cyan anim-scale d3" style="max-width:900px;padding:36px 40px;text-align:left;position:relative;">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:0.85rem;color:var(--cyan);opacity:0.7;margin-bottom:16px;">NEXT · CHAPTER 07</div>
+          <div style="display:flex;align-items:center;gap:24px;">
+            <div style="font-size:3rem;">🔵</div>
+            <div style="flex:1;">
+              <div style="font-family:'Orbitron',sans-serif;font-size:1.6rem;font-weight:700;color:var(--text);margin-bottom:12px;">Headless · 无人值守运行</div>
+              <div style="font-size:1.05rem;color:var(--text-dim);line-height:1.8;">
+                • 从交互式跳到自动化部署<br>
+                • 与 CI/CD 流程深度集成的终极形态
+              </div>
+            </div>
+            <div style="font-size:2.4rem;color:var(--cyan);opacity:0.6;">→</div>
+          </div>
+        </div>
+        <div class="three-dots anim-scale d5">
+          <span></span><span></span><span></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 32: 预留页 ==================== -->
+    <div class="slide" data-idx="32">
+      <div class="placeholder-content">
+        <div class="tag anim-up d1">RESERVED</div>
+        <div style="font-size:5rem;opacity:0.15;margin-bottom:20px;">📄</div>
+        <div class="slide-title anim-up d2"><span class="gold">预留页面</span></div>
+        <div class="divider anim-in d3"></div>
+        <div class="slide-subtitle anim-up d4">后续内容补充区域</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:1rem;color:var(--text-dim);opacity:0.4;margin-top:16px;" class="anim-in d5">32 / 32</div>
+      </div>
+    </div>
+
+  </div><!-- /deck -->
+
+  <!-- NAV -->
+  <div class="nav" id="nav">
+    <button id="prevBtn" title="上一页">‹</button>
+    <div class="dots" id="dots"></div>
+    <div class="page-info" id="pageInfo">1 / 32</div>
+    <button id="nextBtn" title="下一页">›</button>
+  </div>
+
+  <script>
+    // ========== SNOWFLAKE GENERATOR ==========
+    (function createSnow() {
+      var field = document.getElementById('snowfield');
+      var count = 45;
+      for (var i = 0; i < count; i++) {
+        var flake = document.createElement('div');
+        flake.className = 'snowflake';
+        var size = 1.5 + Math.random() * 4;
+        var left = Math.random() * 100;
+        var dur = 10 + Math.random() * 18;
+        var sway = 3 + Math.random() * 6;
+        var delay = Math.random() * dur;
+        var opacity = 0.15 + Math.random() * 0.5;
+        flake.style.cssText =
+          'width:' + size + 'px;height:' + size + 'px;' +
+          'left:' + left + '%;' +
+          'opacity:' + opacity + ';' +
+          'animation-duration:' + dur + 's,' + sway + 's;' +
+          'animation-delay:' + delay + 's,' + (delay * 0.4) + 's;';
+        field.appendChild(flake);
+      }
+    })();
+
+    // ========== DECK ENGINE ==========
+    var slides = Array.from(document.querySelectorAll('.slide'));
+    var totalSlides = slides.length;
+    var current = 0;
+
+    var dotsContainer = document.getElementById('dots');
+    var pageInfo = document.getElementById('pageInfo');
+    var prevBtn = document.getElementById('prevBtn');
+    var nextBtn = document.getElementById('nextBtn');
+
+    // Create dots
+    slides.forEach(function(_, i) {
+      var dot = document.createElement('div');
+      dot.className = 'dot' + (i === 0 ? ' active' : '');
+      dot.addEventListener('click', function() { goTo(i); });
+      dotsContainer.appendChild(dot);
+    });
+
+    function goTo(idx) {
+      if (idx < 0 || idx >= totalSlides) return;
+      slides[current].classList.remove('active');
+      current = idx;
+      slides[current].classList.add('active');
+      // Reset animations
+      slides[current].querySelectorAll('[class*="anim-"]').forEach(function(el) {
+        el.style.animation = 'none';
+        el.offsetHeight;
+        el.style.animation = '';
+      });
+      slides[current].querySelectorAll('.cover-title, .cover-divider, .cover-formula, .cover-footnote, .cover-explain').forEach(function(el) {
+        el.style.animation = 'none';
+        el.offsetHeight;
+        el.style.animation = '';
+      });
+      updateNav();
+      savePos();
+    }
+
+    function updateNav() {
+      var slideNum = current + 1;
+      pageInfo.textContent = slideNum + ' / ' + totalSlides;
+      dotsContainer.querySelectorAll('.dot').forEach(function(d, i) {
+        d.classList.toggle('active', i === current);
+      });
+    }
+
+    prevBtn.addEventListener('click', function() { goTo(current - 1); });
+    nextBtn.addEventListener('click', function() { goTo(current + 1); });
+
+    // Keyboard nav
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') {
+        e.preventDefault();
+        goTo(current + 1);
+      }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        goTo(current - 1);
+      }
+      if (e.key === 'Home') { e.preventDefault(); goTo(0); }
+      if (e.key === 'End')  { e.preventDefault(); goTo(totalSlides - 1); }
+    });
+
+    // Persist position
+    function savePos() {
+      try { localStorage.setItem('ch6-slide', current); } catch(e) {}
+    }
+    function loadPos() {
+      try {
+        var saved = parseInt(localStorage.getItem('ch6-slide'), 10);
+        if (!isNaN(saved) && saved >= 0 && saved < totalSlides) {
+          goTo(saved);
+          return true;
+        }
+      } catch(e) {}
+      return false;
+    }
+
+    // Responsive scale (×1.15)
+    function rescale() {
+      var deck = document.getElementById('deck');
+      var padX = 40, padY = 120;
+      var scale = Math.min(
+        (window.innerWidth - padX) / 1920,
+        (window.innerHeight - padY) / 1080
+      );
+      deck.style.transform = 'scale(' + (scale * 1.15) + ')';
+    }
+    window.addEventListener('resize', rescale);
+    rescale();
+
+    // Init
+    if (!loadPos()) goTo(0);
+  </script>
+</body>
+</html>

@@ -6,7 +6,7 @@
 
 ## 项目简介
 
-本项目是一套**纯 HTML 幻灯片**，用于系统讲解 Claude Code 的技术架构与工程实践。内容从飞书文档截图出发，经过文字提取、排版分析、设计系统约束，最终产出可在浏览器直接打开的 1920×1080 演示文件。
+本项目是一套**纯 HTML 幻灯片**，用于系统讲解 Claude Code 的技术架构与工程实践（前言 + 5 章）。内容从飞书文档截图出发，经过文字提取、排版分析、设计系统约束，最终产出可在浏览器直接打开的 1920×1080 演示文件。
 
 不依赖任何 PPT 软件，不依赖构建工具 — 一个 HTML 文件 = 一套完整的演示 deck。
 
@@ -17,24 +17,33 @@
 ```text
 ClaudeCodeHarness/
 ├── CLAUDE.md                          # Claude Code 项目规范（13 条硬约束）
+├── README.md                          # 项目说明
+├── chat_trick.md                      # 聊天技巧备忘
 ├── 模板.html                          # 全局模板（字体/Token/缩放引擎/导航）
 │
 ├── MD/                                # 内容源文件（从图片提取的飞书风文字）
-│   ├── 前言.md                        #   前言：五个痛点 + Claude Code 定义
-│   ├── 第一章：ClaudeCode技术架构全景.md #   第 1 章：Harness 架构拆解
-│   └── 第二章：记忆系统工程实践.md      #   第 2 章：CLAUDE.md / Memory 工程
+│   ├── 0前言.md                       #   前言：五个痛点 + Claude Code 定义
+│   ├── 第1章：ClaudeCode技术架构全景.md #   第 1 章：Harness 架构拆解
+│   ├── 第2章：记忆系统工程实践.md      #   第 2 章：CLAUDE.md / Memory 工程
+│   ├── 第3章：Skills 工程实践.md       #   第 3 章：Skills 系统详解
+│   ├── 第4章：子智能体与任务委派实践.md #   第 4 章：子智能体与 Agent SDK
+│   ├── 第5章：Hooks 事件驱动自动化.md  #   第 5 章：Hooks 事件驱动自动化
+│   └── 设计规范与约束总结.md           #   详细设计规范（含踩坑记录）
 │
-├── PPT/                               # 最终产出（HTML 幻灯片）
-│   ├── 前言/
-│   │   ├── 母版.html                  #   前言母版
-│   │   └── prologue.html             #   前言完整 deck
-│   ├── 第一章：ClaudeCode技术架构全景/
-│   │   └── chapter1：ClaudeCode技术架构全景.html
-│   └── 第二章：记忆系统工程实践/
-│       └── chapter2：记忆系统工程实践.html
-│
-├── 排版布局分析与飞书风格.md           # 飞书风设计方法论
-└── 设计规范与约束总结.md               # 详细设计规范（已提炼为 CLAUDE.md）
+└── PPT/                               # 最终产出（HTML 幻灯片）
+    ├── 0前言/
+    │   ├── 母版.html                  #   前言母版
+    │   └── prologue.html             #   前言完整 deck
+    ├── 第1章：ClaudeCode技术架构全景/
+    │   └── chapter1：ClaudeCode技术架构全景.html
+    ├── 第2章：记忆系统工程实践/
+    │   └── chapter2：记忆系统工程实践.html
+    ├── 第3章：Skills工程实践/
+    │   └── chapter3：Skills工程实践.html
+    ├── 第4章：子智能体与任务委派实践/
+    │   └── chapter4：子智能体与任务委派实践.html
+    └── 第5章：Hooks事件驱动自动化/
+        └── chapter5：Hooks事件驱动自动化.html
 ```
 
 ---
@@ -103,6 +112,4 @@ ClaudeCodeHarness/
 ## 规范文件
 
 - [CLAUDE.md](CLAUDE.md) — 13 条项目硬约束（Token / 字体 / 缩放 / 引擎 / 动画 / 文件管理）
-- [设计规范与约束总结.md](设计规范与约束总结.md) — 完整设计规范（含踩坑记录、自检清单）
-- [排版布局分析与飞书风格.md](排版布局分析与飞书风格.md) — 飞书风设计方法论
-- [.claude/skills/axi-front-design-main/SKILL.md](.claude/skills/axi-front-design-main/SKILL.md) — AI 设计工作流 Skill
+- [MD/设计规范与约束总结.md](MD/设计规范与约束总结.md) — 完整设计规范（含踩坑记录、自检清单）

@@ -1,4 +1,4 @@
-# axi-front-design
+# ppt-html-design
 
 **A Claude Code skill that turns HTML into high-fidelity design artifacts.**
 
@@ -8,7 +8,7 @@
 
 ## 简介
 
-`axi-front-design` 是一个 Claude Code Skill，让 Claude 扮演**资深设计师**而非通用前端工程师——用 HTML 产出落地页、幻灯片、交互原型、动画、信息图、移动端 Mockup 等高保真设计稿。
+`ppt-html-design` 是一个 Claude Code Skill，让 Claude 扮演**资深设计师**而非通用前端工程师——用 HTML 产出落地页、幻灯片、交互原型、动画、信息图、移动端 Mockup 等高保真设计稿。
 
 核心差异：**先问后做、引用真实设计上下文、给变体而非唯一解、严格规避 AI 俗套。**
 
@@ -33,7 +33,7 @@
 
 ```
 skills/
-└── axi-front-design/
+└── ppt-html-design/
     └── SKILL.md
 ```
 
@@ -43,8 +43,8 @@ skills/
 {
   "skills": [
     {
-      "name": "axi-front-design",
-      "path": "skills/axi-front-design/SKILL.md"
+      "name": "ppt-html-design",
+      "path": "skills/ppt-html-design/SKILL.md"
     }
   ]
 }
@@ -55,7 +55,7 @@ skills/
 ## 使用
 
 ```
-/axi-front-design 帮我做一个 SaaS 产品落地页
+/ppt-html-design 帮我做一个 SaaS 产品落地页
 ```
 
 或者直接描述需求，满足以下任一触发词时会自动激活：
@@ -110,7 +110,7 @@ MIT
 
 ## English
 
-`axi-front-design` is a Claude Code Skill that makes Claude act as a **senior designer**, not a generic frontend engineer. It produces high-fidelity HTML artifacts: landing pages, slide decks, interactive prototypes, motion demos, infographics, and mobile mockups.
+`ppt-html-design` is a Claude Code Skill that makes Claude act as a **senior designer**, not a generic frontend engineer. It produces high-fidelity HTML artifacts: landing pages, slide decks, interactive prototypes, motion demos, infographics, and mobile mockups.
 
 **Key behaviors:**
 - Asks questions before building (via popup, not lists)
@@ -120,12 +120,12 @@ MIT
 
 ### Install
 
-Drop `SKILL.md` into your `skills/axi-front-design/` folder and register it in `.claude/settings.json`.
+Drop `SKILL.md` into your `skills/ppt-html-design/` folder and register it in `.claude/settings.json`.
 
 ### Invoke
 
 ```
-/axi-front-design make a SaaS landing page
+/ppt-html-design make a SaaS landing page
 ```
 
 ### License
